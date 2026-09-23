@@ -1,0 +1,37 @@
+.github-connect { border: 1px solid #e4e7ee; border-radius: 11px; padding: 22px; background: linear-gradient(130deg, #fafbfe, #fff); text-align: left; }
+.github-connect-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 15px; border-radius: 11px; background: #272e39; color: white; }
+.github-connect h3 { font-size: 15px; font-weight: 650; margin-bottom: 7px; }
+.github-connect p { font-size: 12px; color: #747d8b; line-height: 1.7; }
+.github-connect .github-sign-in { width: 100%; margin-top: 17px; gap: 9px; }
+.github-connect .connection-loading { color: #536078; }
+.github-connected { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #f7f9fc; border: 1px solid #e7eaf0; border-radius: 9px; margin-bottom: 23px; color: #546171; font-size: 12px; }
+.github-connected strong { font-weight: 600; color: #303b49; overflow-wrap: anywhere; }
+.github-connected .connection-badge { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: #438368; font-size: 10px; white-space: nowrap; }
+.github-auth-error { margin-top: 13px; }
+.github-auth-error > button { margin-top: 9px; }
+.repository-field { position: relative; }
+.repository-trigger { display: flex; align-items: center; width: 100%; min-height: 45px; padding: 11px 13px; border: 1px solid #dfe4ec; border-radius: 8px; background: #fff; gap: 10px; text-align: left; color: #6b7584; }
+.repository-trigger:hover:not(:disabled), .repository-trigger[aria-expanded="true"] { border-color: #8ba6e3; background: #fcfdff; }
+.repository-trigger > span { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repository-trigger:disabled { background: #f7f8fa; color: #949dab; }
+.repository-selection-meta { display: flex; align-items: center; gap: 11px; margin-top: 9px; color: #7c8593; font-size: 10px; }
+.repository-selection-meta > span, .repository-option-meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.repository-selection-meta > span:last-child { margin-left: auto; color: #969daa; }
+.repository-menu { position: absolute; z-index: 12; top: 77px; width: 100%; min-width: 0; border: 1px solid #dce2ec; border-radius: 10px; background: white; box-shadow: 0 14px 36px #2536531c, 0 3px 8px #25365308; overflow: hidden; }
+.repository-search { display: flex; align-items: center; gap: 9px; padding: 12px 14px; border-bottom: 1px solid #edf0f5; color: #8590a0; }
+.repository-search input { outline: none; border: 0; width: 100%; min-width: 0; font-size: 12px; color: #364355; background: transparent; }
+.repository-search:focus-within { box-shadow: inset 0 -2px #a7bdf0; }
+.repository-list { list-style: none; margin: 0; padding: 5px; max-height: 280px; overflow-y: auto; overscroll-behavior: contain; }
+.repository-option { display: block; width: 100%; padding: 11px 10px; background: transparent; border-radius: 6px; text-align: left; }
+.repository-option:hover, .repository-option[aria-pressed="true"] { background: #f1f5fd; }
+.repository-option-title { display: flex; align-items: center; gap: 7px; color: #53637a; }
+.repository-option-title strong { font-size: 11px; font-weight: 600; color: #34435a; overflow-wrap: anywhere; min-width: 0; }
+.repository-private { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; padding: 2px 4px; border: 1px solid #e2e5ea; border-radius: 4px; color: #7b8491; font-size: 8px; white-space: nowrap; }
+.repository-option p { margin: 5px 0 0 22px; line-height: 1.5; color: #858d99; font-size: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.repository-option-meta { display: flex; gap: 12px; margin: 5px 0 0 22px; font-size: 9px; color: #8e96a3; }
+.repository-menu-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid #edf0f5; padding: 10px 14px; color: #929aa7; font-size: 9px; }
+.repository-menu-footer .text-button { font-size: 10px; color: #4d6da3; }
+.repository-empty { padding: 22px 15px; text-align: center; color: #858e9c; font-size: 11px; line-height: 1.6; }
+.repository-error { margin-top: 12px; }
+.repository-error > .text-button { margin-top: 8px; }
+@media (max-width: 600px) { .github-connect { padding: 18px; } .repository-menu { top: 76px; } .repository-list { max-height: 240px; } }
