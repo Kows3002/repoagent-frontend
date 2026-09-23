@@ -54,6 +54,7 @@ export type ErrorKind =
   | "repository-not-found"
   | "file-not-found"
   | "nothing-changed"
+  | "invalid-session"
   | "service-unavailable"
   | "job-not-found"
   | "invalid-request"

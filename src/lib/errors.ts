@@ -38,6 +38,12 @@ const messages: Record<FriendlyError["kind"], Omit<FriendlyError, "kind">> = {
       "No changes were generated. The requested text may already match the repository. Check the file path and text in your task.",
     retryable: false,
   },
+  "invalid-session": {
+    title: "Sign-in response not recognized",
+    message:
+      "The service returned an unexpected sign-in response. Please try again or check that the API is up to date.",
+    retryable: true,
+  },
   "service-unavailable": {
     title: "Connection interrupted",
     message:

@@ -54,6 +54,38 @@ describe("RepoAgent signed-in workflow",()=>{
   expect((screen.getByRole("button",{name:"Generate Code Change"}) as HTMLButtonElement).disabled).toBe(true);
   expect(jobFetch).not.toHaveBeenCalled();
  });
+ it.each([
+  {name:"minimal signed-out response",payload:{authenticated:false},configured:true},
+  {name:"explicitly unconfigured signed-out response",payload:{authenticated:false,configured:false},configured:false},
+ ])("treats a successful $name as a normal workspace state",async({payload,configured})=>{
+  signedIn=false;
+  vi.mocked(fetch).mockResolvedValueOnce(response(payload));
+  render(<App/>);
+  await screen.findByRole("heading",{name:"Your GitHub. Your changes."});
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText("Connection interrupted")).toBeNull();
+  if(configured){
+   expect(screen.getByRole("link",{name:/Continue with GitHub/}).getAttribute("href")).toBe("/auth/github/login");
+  }else{
+   expect((screen.getByRole("button",{name:/Continue with GitHub/}) as HTMLButtonElement).disabled).toBe(true);
+   expect(screen.getByText(/GitHub sign-in is not available yet/)).toBeTruthy();
+  }
+ });
+ it.each(["network","server"] as const)("shows a real %s failure, then clears the alert after a successful signed-out retry",async(failure)=>{
+  signedIn=false;
+  const fetchMock=vi.mocked(fetch);
+  if(failure==="network")fetchMock.mockRejectedValueOnce(new TypeError("Network unavailable"));
+  else fetchMock.mockResolvedValueOnce(response({detail:"Internal server failure"},500));
+  fetchMock.mockResolvedValueOnce(response({authenticated:false}));
+  render(<App/>);
+  await screen.findByRole("heading",{name:"Connection interrupted"});
+  expect(within(screen.getByRole("alert")).getByText("Connection interrupted")).toBeTruthy();
+  await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Retry sign-in status"}));});
+  expect(await screen.findByRole("link",{name:/Continue with GitHub/})).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText("Connection interrupted")).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+ });
  it("sends only selected repository and task with session credentials and CSRF",async()=>{
   jobFetch.mockResolvedValue(response({id:42,status:"queued"}));
   await mount();await fill();await generate();

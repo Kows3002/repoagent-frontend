@@ -83,3 +83,55 @@ test("an aborted session response cannot replace a newer session's CSRF", async 
   await assert.rejects(request, (error: unknown) => error instanceof Error && error.name === "AbortError");
   assert.equal(getCsrfHeaders()["X-CSRF-Token"], "current-session");
 });
+
+test("a minimal successful signed-out session is normal and clears stale credentials", async (context) => {
+  setSessionCsrfToken("stale-session");
+  context.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ authenticated: false })));
+  assert.deepEqual(await getGitHubSession(), { authenticated: false, configured: true, user: null });
+  assert.equal(hasSessionCsrfToken(), false);
+});
+
+test("signed-out sessions ignore user and CSRF fields that belong to another state", async (context) => {
+  context.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    authenticated: false, configured: true, user: {id:123, login:"stale-user"}, csrf_token:"stale-token",
+  })));
+  assert.deepEqual(await getGitHubSession(), { authenticated: false, configured: true, user: null });
+  assert.equal(hasSessionCsrfToken(), false);
+});
+
+test("unexpected successful session responses are not reported as network failures", async (context) => {
+  const responses = [
+    new Response(JSON.stringify({ configured: true })),
+    new Response(JSON.stringify({ authenticated: true, configured: true, user: null })),
+    new Response("<html>Wrong endpoint</html>", { status: 200 }),
+  ];
+  context.mock.method(globalThis, "fetch", async () => responses.shift()!);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await assert.rejects(getGitHubSession(), (error: unknown) => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.friendly.kind, "invalid-session");
+      assert.notEqual(error.friendly.title, "Connection interrupted");
+      return true;
+    });
+  }
+});
+
+test("network, timeout, and HTTP500 failures remain connection errors", async (context) => {
+  const attempts: Array<Error | Response> = [
+    new TypeError("Failed to fetch"),
+    new DOMException("Request timed out", "TimeoutError"),
+    new Response(JSON.stringify({ detail: "Internal server error" }), { status: 500 }),
+  ];
+  context.mock.method(globalThis, "fetch", async () => {
+    const result = attempts.shift()!;
+    if (result instanceof Error) throw result;
+    return result;
+  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await assert.rejects(getGitHubSession(), (error: unknown) => {
+      assert.ok(error instanceof ApiError);
+      assert.equal(error.friendly.title, "Connection interrupted");
+      return true;
+    });
+  }
+});

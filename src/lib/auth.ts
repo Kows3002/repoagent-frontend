@@ -56,6 +56,9 @@ export async function sessionRequest(
     data = await response.json();
   } catch {
     if (options.signal?.aborted) throw new DOMException("Request canceled", "AbortError");
+    if (response.ok && path === "/auth/session") {
+      throw new ApiError(friendlyError("invalid-session"));
+    }
     throw new ApiError(mapError(null, response.ok ? 503 : response.status, context));
   }
   if (!response.ok) {
@@ -73,21 +76,24 @@ function object(value: unknown): Record<string, unknown> {
 export async function getGitHubSession(signal?: AbortSignal): Promise<GitHubSession> {
   const data = object(await sessionRequest("/auth/session", { signal }));
   if (signal?.aborted) throw new DOMException("Request canceled", "AbortError");
-  if (typeof data.authenticated !== "boolean" || typeof data.configured !== "boolean") {
-    throw new ApiError(friendlyError("service-unavailable"));
+  if (typeof data.authenticated !== "boolean") {
+    throw new ApiError(friendlyError("invalid-session"));
   }
-  if (!data.authenticated) {
+  // Older session endpoints omit this optional availability hint. A successful
+  // signed-out response still permits login unless the server disables it.
+  const configured = data.configured !== false;
+  if (data.authenticated === false) {
     sessionCsrfToken = null;
-    return { authenticated: false, configured: data.configured, user: null };
+    return { authenticated: false, configured, user: null };
   }
   const user = object(data.user);
   if (typeof user.id !== "number" || !Number.isFinite(user.id) || typeof user.login !== "string" || !user.login || typeof data.csrf_token !== "string" || !data.csrf_token) {
-    throw new ApiError(friendlyError("service-unavailable"));
+    throw new ApiError(friendlyError("invalid-session"));
   }
   sessionCsrfToken = data.csrf_token;
   return {
     authenticated: true,
-    configured: data.configured,
+    configured,
     user: {
       id: typeof user.user_id === "number" ? user.user_id : user.id,
       github_id: typeof user.github_id === "number" ? user.github_id : user.id,
