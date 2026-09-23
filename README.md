@@ -21,12 +21,13 @@ cd backend
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Vite forwards `/auth` and `/jobs` to `http://127.0.0.1:8000`. Copy `.env.example` to `.env.local` to change these values:
+With `VITE_API_URL=` (empty), Vite forwards `/auth` and `/jobs` to `http://127.0.0.1:8000`. An absolute `VITE_API_URL` connects the browser directly to that API. The example environment connects to Render; use an empty value for a local backend.
 
 | Variable | Purpose |
 | --- | --- |
 | `API_PROXY_TARGET` | Development API proxy target; defaults to `http://127.0.0.1:8000`. |
-| `VITE_API_BASE_URL` | Leave empty for the same-origin proxy. An absolute API URL requires credentialed CORS and compatible session cookies. |
+| `VITE_API_URL` | Browser API base URL, for example `https://repoagent.onrender.com`. Leave empty for the same-origin proxy. Requires credentialed CORS and compatible session cookies for another site. |
+| `VITE_API_BASE_URL` | Legacy alias used only when `VITE_API_URL` is not defined. |
 | `VITE_PREVIEW_ORIGIN` | Allowed wildcard origin for preview frames. Defaults to `http://*.localhost:8000`; must match backend `PREVIEW_DOMAIN`, `PREVIEW_SCHEME`, and `PREVIEW_PORT`. |
 
 The frontend can render without a backend, but sign-in, repository selection, generation, and previews require the API. An unreachable API produces a connection message. When OAuth is not configured, the workspace reports that GitHub sign-in is unavailable.
@@ -38,6 +39,32 @@ Register a GitHub OAuth App with local callback URL `http://127.0.0.1:5173/auth/
 Use the same host consistently for the workspace, login, and callback; do not mix `localhost` and `127.0.0.1`. The repository picker lists repositories the connected account can push to, supports filtering the loaded list, and offers pagination. Users do not paste repository URLs or personal access tokens.
 
 The browser receives a signed HttpOnly cookie containing an opaque session identifier. Session data lives in the backend database and expires after at most seven days. GitHub OAuth credentials stay encrypted on the backend. The frontend keeps the session's CSRF value only in module memory and sends it as `X-CSRF-Token` on mutations; no access token is stored in browser storage.
+
+## Connect to the Render API
+
+Set this public URL in frontend/.env, then restart Vite (or rebuild the deployed frontend):
+
+```dotenv
+VITE_API_URL=https://repoagent.onrender.com
+```
+
+The shared API client uses it for GitHub login, sessions, repositories, job creation, status polling, previews, and approval. It sends session cookies and the CSRF header automatically. The frontend Content Security Policy uses the same configured host.
+
+For a local frontend at http://127.0.0.1:5173 connecting directly to Render, set these variables in the Render API service, then deploy the updated backend:
+
+```dotenv
+GITHUB_CALLBACK_URL=https://repoagent.onrender.com/auth/github/callback
+FRONTEND_URL=http://127.0.0.1:5173
+CORS_ORIGINS=http://127.0.0.1:5173
+SESSION_SAME_SITE=none
+SESSION_HTTPS_ONLY=true
+```
+
+The GitHub OAuth app must register that exact Render callback URL. The API also needs GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, its persistent SESSION_SECRET (or APP_SECRET), and the existing database/AI configuration. The frontend URL alone does not configure OAuth. Replace FRONTEND_URL and CORS_ORIGINS with the actual frontend origin for a deployed workspace; never use a wildcard with credentialed CORS.
+
+Browser third-party-cookie blocking can still prevent sessions across different sites. A same-origin reverse proxy is the preferred deployment when those browsers must be supported: set VITE_API_URL empty, proxy /auth and /jobs to Render, and register the proxy origin's callback instead.
+
+To check availability, open https://repoagent.onrender.com/health and /auth/session. The session endpoint should return configured: true before the GitHub button becomes available. The API must be running the current OAuth/session routes.
 
 ## Real before-and-after previews
 
@@ -53,7 +80,7 @@ For production, configure a dedicated wildcard preview domain and HTTPS, for exa
 
 ```dotenv
 # frontend/.env.production
-VITE_API_BASE_URL=
+VITE_API_URL=
 VITE_PREVIEW_ORIGIN=https://*.preview.example.net
 ```
 

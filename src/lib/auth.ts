@@ -1,8 +1,9 @@
 import { ApiError, friendlyError, mapError, type ErrorContext } from "./errors";
 import type { GitHubRepository, GitHubSession, RepositoryPage } from "./types";
 import { isValidGitHubUrl } from "./validation";
+import { resolveApiBaseUrl } from "./config";
 
-export const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
+export const API_BASE_URL = resolveApiBaseUrl(import.meta.env);
 export const SESSION_EXPIRED_EVENT = "repoagent:session-expired";
 let sessionCsrfToken: string | null = null;
 
