@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { approveJob, createJob, getJob } from "../lib/api";
+import { DEFAULT_COMMIT_MESSAGE } from "../lib/commit";
 import { friendlyError, isAbortError, mapError } from "../lib/errors";
 import type {
   FriendlyError,
@@ -20,6 +21,7 @@ export function useJob() {
   );
   const [isApproving, setIsApproving] = useState(false);
   const [isPushed, setIsPushed] = useState(false);
+  const [approvedCommitMessage, setApprovedCommitMessage] = useState<string | null>(null);
   const jobRef = useRef<Job | null>(null);
   const generation = useRef(0);
   const requestController = useRef<AbortController | null>(null);
@@ -121,6 +123,7 @@ export function useJob() {
       setApprovalError(null);
       setIsApproving(false);
       setIsPushed(false);
+      setApprovedCommitMessage(null);
 
       try {
         const result = await createJob(input, controller.signal);
@@ -155,7 +158,7 @@ export function useJob() {
     [applyResult, cancelRequests, poll],
   );
 
-  const approve = useCallback(async (): Promise<void> => {
+  const approve = useCallback(async (commitMessage = DEFAULT_COMMIT_MESSAGE): Promise<void> => {
     const currentJob = jobRef.current;
     if (
       !currentJob ||
@@ -175,10 +178,11 @@ export function useJob() {
     setIsApproving(true);
     setApprovalError(null);
     try {
-      await approveJob(currentJob.id, controller.signal);
+      const committed = await approveJob(currentJob.id, controller.signal, commitMessage);
       if (!mounted.current || version !== generation.current) return;
       pushed.current = true;
       setIsPushed(true);
+      setApprovedCommitMessage(committed);
     } catch (failure) {
       if (
         !mounted.current ||
@@ -207,6 +211,7 @@ export function useJob() {
     setApprovalError(null);
     setIsApproving(false);
     setIsPushed(false);
+    setApprovedCommitMessage(null);
   }, [cancelRequests]);
 
   const retryPolling = useCallback(() => {
@@ -232,6 +237,7 @@ export function useJob() {
     approvalError,
     isApproving,
     isPushed,
+    approvedCommitMessage,
     submit,
     approve,
     reset,

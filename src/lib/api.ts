@@ -1,3 +1,4 @@
+import { DEFAULT_COMMIT_MESSAGE, getCommitMessageError } from "./commit";
 import { ApiError, friendlyError, mapError } from "./errors";
 import { API_BASE_URL, getGitHubSession, sessionRequest, signOutGitHub } from "./auth";
 import type { Job, JobInput, JobResult, JobStatus, User } from "./types";
@@ -155,11 +156,23 @@ export function confirmPushResult(value: unknown): void {
 export async function approveJob(
   id: Job["id"],
   signal: AbortSignal,
-): Promise<void> {
+  commitMessage = DEFAULT_COMMIT_MESSAGE,
+): Promise<string> {
+  if (getCommitMessageError(commitMessage)) {
+    throw new ApiError(friendlyError("invalid-commit-message"));
+  }
+  const message = commitMessage.trim();
   const data = await request(
     `/jobs/${encodeURIComponent(String(id))}/approve`,
-    { method: "POST", signal },
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commit_message: message }),
+      signal,
+    },
     "approve",
   );
   confirmPushResult(data);
+  const committed = objectValue(data).commit_message;
+  return typeof committed === "string" && committed.trim() ? committed.trim() : message;
 }

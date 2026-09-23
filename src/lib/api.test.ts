@@ -145,7 +145,8 @@ test("create, poll, and approve use the backend contract without retaining crede
     controller.signal,
   );
   await getJob(result.job.id, controller.signal);
-  await approveJob(result.job.id, controller.signal);
+  const commitMessage = await approveJob(result.job.id, controller.signal);
+  assert.equal(commitMessage, "RepoAgent: Apply requested changes");
 
   assert.deepEqual(
     requests.map(({ url }) => url),
@@ -156,7 +157,10 @@ test("create, poll, and approve use the backend contract without retaining crede
     repo_url: "https://github.com/me/project.git",
     task: "Replace old with new.",
   });
-  assert.equal(requests[2].options?.body, undefined);
+  assert.deepEqual(JSON.parse(String(requests[2].options?.body)), {
+    commit_message: "RepoAgent: Apply requested changes",
+  });
+  assert.equal(new Headers(requests[2].options?.headers).get("Content-Type"), "application/json");
   assert.equal(new Headers(requests[0].options?.headers).get("X-CSRF-Token"), "test-session-csrf");
   assert.equal(new Headers(requests[2].options?.headers).get("X-CSRF-Token"), "test-session-csrf");
   assert.equal(new Headers(requests[1].options?.headers).has("X-CSRF-Token"), false);
@@ -213,4 +217,33 @@ test("session identity contains only public fields and logout includes cookies",
 test("an unauthenticated session is a normal signed-out state", async (context) => {
   context.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ detail: "Not authenticated" }), { status: 401 }));
   assert.equal(await getCurrentUser(new AbortController().signal), null);
+});
+
+test("approval sends the trimmed draft and returns the message Git actually committed", async (context) => {
+  let requestOptions: RequestInit | undefined;
+  context.mock.method(globalThis, "fetch", async (_url: string, options?: RequestInit) => {
+    requestOptions = options;
+    return new Response(JSON.stringify({
+      message: "Changes pushed successfully",
+      commit_message: "Original committed title",
+    }), {headers: {"Content-Type": "application/json"}});
+  });
+
+  const message = await approveJob(7, new AbortController().signal, "  Revised title for retry  ");
+
+  assert.deepEqual(JSON.parse(String(requestOptions?.body)), {
+    commit_message: "Revised title for retry",
+  });
+  assert.equal(message, "Original committed title");
+});
+
+test("approval uses the submitted message when an older backend omits it", async (context) => {
+  context.mock.method(globalThis, "fetch", async () =>
+    new Response(JSON.stringify({message: "Changes pushed successfully"})),
+  );
+
+  assert.equal(
+    await approveJob(7, new AbortController().signal, "  Update the login title  "),
+    "Update the login title",
+  );
 });

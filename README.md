@@ -101,13 +101,13 @@ The backend must use the matching preview hostname and scheme. DNS and the rever
 | `GET /jobs/{id}` | Polled every 2.5 seconds until completed or failed. |
 | `POST /jobs/{id}/preview` | Starts preparation of both snapshots for a completed job. |
 | `GET /jobs/{id}/preview` | Returns preview status and, when ready, expiring `before_url` and `after_url`. |
-| `POST /jobs/{id}/approve` | Commits and pushes only after explicit approval. |
+| `POST /jobs/{id}/approve` | Accepts `{ commit_message }` and commits and pushes only after explicit approval. |
 
 All API requests use `credentials: "include"`. POST requests include the CSRF header and a trusted browser origin. The backend retains `GET /auth/me` as a compatibility endpoint; the frontend uses `/auth/session`.
 
 Job responses include `id`, `status`, `repo_url`, `task`, `ai_result`, and `diff`. Stages are queued, analyzing, generating, completed, and failed; the legacy running state is also understood.
 
-Approval requires a completed, nonempty diff and an explicit successful push response. The commit message is `RepoAgent: Apply requested changes`. The backend pushes directly to the repository's default branch; it does not create a branch or pull request.
+Approval requires a completed, nonempty diff and an explicit successful push response. The approval card starts with `RepoAgent: Apply requested changes` and lets the user edit the commit message before pushing. Messages must be a nonempty single line of up to 200 characters; surrounding spaces are trimmed. The field locks while the push is running and retains the draft after a failure. The success card displays the backend's actual `commit_message`, including when a retry pushes an existing commit. Deploy the updated backend with the frontend; the approval body is optional for older clients and no database migration is required. The backend pushes directly to the repository's default branch; it does not create a branch or pull request.
 
 ## Build and test
 

@@ -187,4 +187,54 @@ describe("useJob lifecycle", () => {
     await act(() => vi.advanceTimersByTimeAsync(15_000));
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+  it("stores the actual committed message and clears it for a new job and logout", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({id: 1, status: "completed", diff: "-old\n+new"}))
+      .mockResolvedValueOnce(json({message: "Changes pushed successfully", commit_message: "Actual committed title"}))
+      .mockResolvedValueOnce(json({id: 2, status: "completed", diff: "-old\n+new"}))
+      .mockResolvedValueOnce(json({message: "Changes pushed successfully", commit_message: "Second job title"}));
+    vi.stubGlobal("fetch", fetchMock);
+    const {result} = renderHook(() => useJob());
+
+    await act(async () => { await result.current.submit(input); });
+    await act(async () => { await result.current.approve("Requested title"); });
+    expect(result.current.approvedCommitMessage).toBe("Actual committed title");
+    expect(result.current.isPushed).toBe(true);
+
+    await act(async () => { await result.current.submit(input); });
+    expect(result.current.approvedCommitMessage).toBeNull();
+    expect(result.current.isPushed).toBe(false);
+    await act(async () => { await result.current.approve("Second job title"); });
+    expect(result.current.approvedCommitMessage).toBe("Second job title");
+
+    act(() => result.current.reset());
+    expect(result.current.approvedCommitMessage).toBeNull();
+    expect(result.current.isPushed).toBe(false);
+    expect(result.current.job).toBeNull();
+  });
+
+  it("ignores a late approval response after the account is reset", async () => {
+    let resolvePush!: (response: Response) => void;
+    const pendingPush = new Promise<Response>((resolve) => { resolvePush = resolve; });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({id: 1, status: "completed", diff: "-old\n+new"}))
+      .mockReturnValueOnce(pendingPush);
+    vi.stubGlobal("fetch", fetchMock);
+    const {result} = renderHook(() => useJob());
+    await act(async () => { await result.current.submit(input); });
+    let approval!: Promise<void>;
+    act(() => { approval = result.current.approve("First account title"); });
+
+    act(() => result.current.reset());
+    expect((fetchMock.mock.calls[1][1] as RequestInit).signal?.aborted).toBe(true);
+    await act(async () => {
+      resolvePush(json({message: "Changes pushed successfully", commit_message: "First account title"}));
+      await approval;
+    });
+
+    expect(result.current.approvedCommitMessage).toBeNull();
+    expect(result.current.isPushed).toBe(false);
+    expect(result.current.job).toBeNull();
+  });
+
 });

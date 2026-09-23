@@ -57,6 +57,7 @@ export type ErrorKind =
   | "invalid-session"
   | "service-unavailable"
   | "job-not-found"
+  | "invalid-commit-message"
   | "invalid-request"
   | "push-failed"
   | "unknown";

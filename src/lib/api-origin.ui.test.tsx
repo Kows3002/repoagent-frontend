@@ -31,7 +31,7 @@ it("routes OAuth, jobs, polling, and previews to Render with cookies and CSRF", 
   await api.getJob(42,signal);
   await preview.startPreview(42,signal);
   await preview.fetchPreview(42,signal);
-  await api.approveJob(42,signal);
+  await api.approveJob(42,signal,"Update the login title");
 
   expect(fetchMock.mock.calls.map(([url])=>url)).toEqual([
     "https://repoagent.onrender.com/auth/session",
@@ -46,4 +46,5 @@ it("routes OAuth, jobs, polling, and previews to Render with cookies and CSRF", 
     if(options.method==="POST") expect(new Headers(options.headers).get("X-CSRF-Token")).toBe("test-csrf");
   }
   expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({repo_url:"https://github.com/octocat/project.git",task:"Change the title"});
+  expect(JSON.parse(fetchMock.mock.calls[5][1].body)).toEqual({commit_message:"Update the login title"});
 });

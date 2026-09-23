@@ -56,6 +56,11 @@ const messages: Record<FriendlyError["kind"], Omit<FriendlyError, "kind">> = {
       "This job could not be found. Generate a new code change to continue.",
     retryable: false,
   },
+  "invalid-commit-message": {
+    title: "Check your commit message",
+    message: "Enter a single-line commit message between 1 and 200 characters.",
+    retryable: false,
+  },
   "invalid-request": {
     title: "Check your request",
     message:
@@ -142,6 +147,9 @@ export function mapError(
     )
   ) {
     return friendlyError("github-access-denied");
+  }
+  if (status === 422 && context === "approve") {
+    return friendlyError("invalid-commit-message");
   }
   if (status === 422 || (context === "create" && status === 400)) {
     return friendlyError("invalid-request");

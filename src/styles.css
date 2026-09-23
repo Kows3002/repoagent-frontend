@@ -1212,6 +1212,16 @@ h1 > span {
   margin-top: 5px;
   line-height: 1.7;
 }
+.approve-form {
+  margin-top: 18px;
+}
+.commit-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #476751;
+  margin-bottom: 7px;
+}
 .commit-message {
   display: flex;
   align-items: center;
@@ -1220,9 +1230,50 @@ h1 > span {
   background: #fff;
   border: 1px solid #e1ebe4;
   color: #7b9182;
-  margin: 18px 0 12px;
+  margin: 0 0 7px;
   border-radius: 6px;
-  font: 10px var(--font-mono);
+  font: 11px var(--font-mono);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.commit-message svg {
+  flex-shrink: 0;
+}
+.commit-message input {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #36483c;
+  font: inherit;
+}
+.commit-message input:disabled {
+  cursor: wait;
+  color: #7b9182;
+}
+.commit-message:focus-within {
+  border-color: #6f95e0;
+  box-shadow: 0 0 0 3px #3666dc16;
+}
+.commit-message-invalid {
+  border-color: #cf7771;
+}
+.commit-hint {
+  margin-bottom: 15px;
+  color: #6e8375;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.commit-error {
+  color: #a3403b;
+}
+.commit-message-saved {
+  margin-bottom: 12px;
+}
+.commit-message-saved span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .button-success {
   background: #3d8958;

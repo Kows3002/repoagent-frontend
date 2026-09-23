@@ -72,6 +72,7 @@ export default function App() {
     approvalError,
     isApproving,
     isPushed,
+    approvedCommitMessage,
     submit,
     approve,
     retryPolling,
@@ -369,9 +370,11 @@ export default function App() {
             </section>
             {auth.user && job?.status === "completed" && hasDiff ? (
               <ApproveCard
+                key={job.id}
                 onApprove={approve}
                 isApproving={isApproving}
                 isPushed={isPushed}
+                approvedCommitMessage={approvedCommitMessage}
                 error={approvalError}
               />
             ) : null}

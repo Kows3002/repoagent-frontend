@@ -105,8 +105,16 @@ describe("RepoAgent signed-in workflow",()=>{
   await act(async()=>{await vi.advanceTimersByTimeAsync(7500);});
   expect(screen.getByRole("table",{name:"Unified diff for src/App.tsx"})).toBeTruthy();
   expect(jobFetch).toHaveBeenCalledTimes(4);
+  const commitInput = screen.getByRole("textbox", {name: "Commit message"}) as HTMLInputElement;
+  expect(commitInput.value).toBe("RepoAgent: Apply requested changes");
+  fireEvent.change(commitInput, {target: {value: "  Update the login title  "}});
   await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Approve & Push to GitHub"}));});
-  expect(jobFetch.mock.calls[4][0]).toBe("/jobs/42/approve");
+  const [approvalPath, approvalOptions] = jobFetch.mock.calls[4];
+  expect(approvalPath).toBe("/jobs/42/approve");
+  expect(JSON.parse(approvalOptions.body)).toEqual({commit_message: "Update the login title"});
+  expect(approvalOptions.credentials).toBe("include");
+  expect(new Headers(approvalOptions.headers).get("X-CSRF-Token")).toBe("test-csrf");
+  expect(screen.getByText("Update the login title")).toBeTruthy();
   expect(screen.getByRole("heading",{name:"Changes pushed successfully"})).toBeTruthy();
   await act(async()=>{await vi.advanceTimersByTimeAsync(10000);});
   expect(jobFetch).toHaveBeenCalledTimes(5);
@@ -164,4 +172,76 @@ describe("RepoAgent signed-in workflow",()=>{
   fireEvent.click(within(dialog).getByRole("button",{name:"Close dialog"}));
   expect(screen.queryByRole("dialog")).toBeNull();
  });
+ it("requires a nonblank message and locks editing while the push is pending", async () => {
+  let resolvePush!: (response: Response) => void;
+  const pendingPush = new Promise<Response>((resolve) => { resolvePush = resolve; });
+  jobFetch
+   .mockResolvedValueOnce(response(completed))
+   .mockReturnValueOnce(pendingPush);
+  await mount(); await fill(); await generate();
+  const commitInput = screen.getByRole("textbox", {name: "Commit message"}) as HTMLInputElement;
+  const approveButton = screen.getByRole("button", {name: "Approve & Push to GitHub"}) as HTMLButtonElement;
+  expect(commitInput.maxLength).toBe(200);
+
+  fireEvent.change(commitInput, {target: {value: "   "}});
+  expect(approveButton.disabled).toBe(true);
+  fireEvent.click(approveButton);
+  expect(jobFetch).toHaveBeenCalledTimes(1);
+
+  fireEvent.change(commitInput, {target: {value: "Update the login title"}});
+  await act(async () => { fireEvent.click(approveButton); });
+  expect(commitInput.disabled).toBe(true);
+  expect(approveButton.disabled).toBe(true);
+  fireEvent.click(approveButton);
+  expect(jobFetch).toHaveBeenCalledTimes(2);
+
+  await act(async () => {
+   resolvePush(response({message: "Changes pushed successfully", commit_message: "Update the login title"}));
+  });
+  expect(screen.getByRole("heading", {name: "Changes pushed successfully"})).toBeTruthy();
+  expect(screen.queryByRole("button", {name: "Approve & Push to GitHub"})).toBeNull();
+ });
+
+ it("keeps the draft after a push failure and displays the actual committed message after retry", async () => {
+  jobFetch
+   .mockResolvedValueOnce(response(completed))
+   .mockRejectedValueOnce(new TypeError("Network disconnected"))
+   .mockResolvedValueOnce(response({message: "Changes pushed successfully", commit_message: "Original committed title"}));
+  await mount(); await fill(); await generate();
+  const commitInput = screen.getByRole("textbox", {name: "Commit message"}) as HTMLInputElement;
+  fireEvent.change(commitInput, {target: {value: "Original committed title"}});
+  await act(async () => {
+   fireEvent.click(screen.getByRole("button", {name: "Approve & Push to GitHub"}));
+  });
+  expect(commitInput.value).toBe("Original committed title");
+  expect(commitInput.disabled).toBe(false);
+  expect(screen.getByRole("alert")).toBeTruthy();
+
+  fireEvent.change(commitInput, {target: {value: "Revised title for retry"}});
+  await act(async () => {
+   fireEvent.click(screen.getByRole("button", {name: "Approve & Push to GitHub"}));
+  });
+  expect(JSON.parse(jobFetch.mock.calls[2][1].body)).toEqual({commit_message: "Revised title for retry"});
+  expect(screen.getByRole("heading", {name: "Changes pushed successfully"})).toBeTruthy();
+  expect(screen.getByText("Original committed title")).toBeTruthy();
+  expect(screen.queryByText("Revised title for retry")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+ });
+
+ it("starts a new job with the default commit message instead of the previous draft", async () => {
+  jobFetch
+   .mockResolvedValueOnce(response(completed))
+   .mockResolvedValueOnce(response({...completed, id: 43}));
+  await mount(); await fill(); await generate();
+  fireEvent.change(screen.getByRole("textbox", {name: "Commit message"}), {
+   target: {value: "Only for the first job"},
+  });
+
+  await generate();
+
+  expect((screen.getByRole("textbox", {name: "Commit message"}) as HTMLInputElement).value)
+   .toBe("RepoAgent: Apply requested changes");
+  expect(jobFetch).toHaveBeenCalledTimes(2);
+ });
+
 });
