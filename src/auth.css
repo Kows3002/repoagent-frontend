@@ -1,24 +1,24 @@
 .auth-card {
   padding: 26px;
-  background: #23211e;
-  border-color: #62513f;
+  background: var(--surface);
+  border-color: var(--border);
 }
 .auth-card>svg {
-  color: #e5b998;
+  color: var(--text);
   margin-bottom: 15px;
 }
 .auth-card h2 {
-  font-size: 23px;
+  font-size: 21px;
   line-height: 1.25;
-  font-weight: 550;
-  letter-spacing: -.6px;
-  color: #f0e3d8;
+  font-weight: 600;
+  letter-spacing: -.5px;
+  color: var(--text);
 }
 .auth-card p {
   font-size: 14px;
-  color: #c2b7ae;
+  color: var(--muted);
   line-height: 1.75;
-  margin-top: 13px;
+  margin-top: 10px;
 }
 .auth-card .button {
   width: 100%;
@@ -31,18 +31,19 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 47px;
+  min-height: 46px;
   padding: 11px 13px;
-  border: 1px solid #444c55;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: #151a1f;
+  background: var(--input-bg);
   gap: 10px;
   text-align: left;
-  color: #bac5d2;
+  color: var(--text);
+  border-color: var(--border-strong);
 }
 .repository-trigger:hover:not(:disabled),.repository-trigger[aria-expanded="true"] {
-  border-color: #849bc4;
-  background: #1c232d;
+  border-color: var(--blue);
+  background: var(--input-bg);
 }
 .repository-trigger>span {
   flex: 1;
@@ -53,8 +54,8 @@
   white-space: nowrap;
 }
 .repository-trigger:disabled {
-  background: #202428;
-  color: #a6abb1;
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
   opacity: .65;
 }
 .repository-selection-meta {
@@ -62,7 +63,7 @@
   align-items: center;
   gap: 12px;
   margin-top: 10px;
-  color: #a3adba;
+  color: var(--muted);
   font-size: 12px;
 }
 .repository-selection-meta>span,.repository-option-meta>span {
@@ -72,7 +73,7 @@
 }
 .repository-selection-meta>span:last-child {
   margin-left: auto;
-  color: #929ca8;
+  color: var(--subtle);
 }
 .repository-menu {
   position: absolute;
@@ -80,19 +81,20 @@
   top: 81px;
   width: 100%;
   min-width: 0;
-  border: 1px solid #637285;
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: #20262d;
-  box-shadow: 0 18px 40px #0008;
+  background: var(--surface);
+  box-shadow: 0 14px 36px var(--floating-shadow);
   overflow: hidden;
+  border-color: var(--border-strong);
 }
 .repository-search {
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 13px;
-  border-bottom: 1px solid #434d58;
-  color: #aab7c8;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
 }
 .repository-search input {
   outline: none;
@@ -100,14 +102,14 @@
   width: 100%;
   min-width: 0;
   font-size: 14px;
-  color: #e1e8f2;
+  color: var(--text);
   background: transparent;
 }
 .repository-search input::placeholder {
-  color: #a8b1bf;
+  color: var(--subtle);
 }
 .repository-search:focus-within {
-  box-shadow: inset 0 -2px #99baf4;
+  box-shadow: inset 0 -2px var(--blue);
 }
 .repository-list {
   list-style: none;
@@ -126,18 +128,18 @@
   text-align: left;
 }
 .repository-option:hover,.repository-option[aria-pressed="true"] {
-  background: #323e4d;
+  background: var(--blue-bg);
 }
 .repository-option-title {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #bac9db;
+  color: var(--muted);
 }
 .repository-option-title strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 550;
-  color: #e1e7ee;
+  color: var(--text);
   overflow-wrap: anywhere;
   min-width: 0;
 }
@@ -147,16 +149,16 @@
   gap: 3px;
   margin-left: auto;
   padding: 2px 5px;
-  border: 1px solid #526073;
+  border: 1px solid var(--border);
   border-radius: 3px;
-  color: #bfc8d5;
+  color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
 }
 .repository-option p {
   margin: 6px 0 0 22px;
   line-height: 1.5;
-  color: #a5b0bf;
+  color: var(--muted);
   font-size: 12px;
   overflow: hidden;
   white-space: nowrap;
@@ -167,16 +169,16 @@
   gap: 12px;
   margin: 6px 0 0 22px;
   font-size: 12px;
-  color: #abb9ca;
+  color: var(--muted);
 }
 .repository-menu-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  border-top: 1px solid #434d58;
+  border-top: 1px solid var(--border);
   padding: 11px 14px;
-  color: #a6b3c5;
+  color: var(--muted);
   font-size: 12px;
 }
 .repository-menu-footer .text-button {
@@ -185,7 +187,7 @@
 .repository-empty {
   padding: 23px 15px;
   text-align: center;
-  color: #b3bece;
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -207,6 +209,6 @@
   }
 }
 .card.auth-card {
-  background: #23211e;
-  border-color: #62513f;
+  background: var(--surface);
+  border-color: var(--border);
 }

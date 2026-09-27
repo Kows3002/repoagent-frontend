@@ -1,4 +1,5 @@
-import { ArrowUpRight, BookOpen, Github, History, LayoutPanelLeft, Plus } from "lucide-react";
+import { ArrowUpRight, BookOpen, Github, History, LayoutPanelLeft, Moon, Plus, Sun } from "lucide-react";
+import { useTheme } from "../hooks/useTheme";
 import type { User } from "../lib/types";
 
 export default function Header({ onHelp, user, onLogout, loggingOut, view, onViewChange, onNewChange, busy }: {
@@ -11,6 +12,7 @@ export default function Header({ onHelp, user, onLogout, loggingOut, view, onVie
   onNewChange: () => void;
   busy: boolean;
 }) {
+  const { theme, toggleTheme } = useTheme();
   return (
     <header className="site-header">
       <div className="page-width header-inner">
@@ -23,6 +25,9 @@ export default function Header({ onHelp, user, onLogout, loggingOut, view, onVie
           <button className={"nav-link" + (view === "activity" ? " nav-link-active" : "")} aria-current={view === "activity" ? "page" : undefined} onClick={() => onViewChange("activity")} disabled={!user}><History size={16} />Activity</button>
         </nav>
         <div className="header-actions">
+          <button className="icon-button theme-toggle" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
           <button className="icon-button help-button" onClick={onHelp} aria-label="How it works" title="How it works"><BookOpen size={18} /></button>
           {user ? <>
             <button className="button button-outline new-change-button" onClick={onNewChange} disabled={busy}><Plus size={16} />New change</button>

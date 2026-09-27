@@ -17,13 +17,13 @@ const messages: Record<FriendlyError["kind"], Omit<FriendlyError, "kind">> = {
   "github-access-denied": {
     title: "GitHub access required",
     message:
-      "Make sure your GitHub account can write to this repository. If access was revoked, sign out and continue with GitHub again.",
+      "Use Manage access to connect this repository to RepoAgent on GitHub. Your account and the GitHub App both need permission to write to it.",
     retryable: false,
   },
   "repository-not-found": {
     title: "Repository not found",
     message:
-      "Choose a repository your connected GitHub account can access.",
+      "Check that the repository still exists and is connected to RepoAgent through Manage access on GitHub.",
     retryable: false,
   },
   "file-not-found": {
@@ -139,10 +139,10 @@ export function mapError(
     return friendlyError("file-not-found");
   }
   if (status === 401) return friendlyError("session-expired");
-  if (/csrf|session.*(?:refresh|expired)|not authenticated/.test(detail)) return friendlyError("authentication-required");
+  if (/csrf|session.*(?:refresh|expired)|not authenticated|github (?:connection|sign-in) expired/.test(detail)) return friendlyError("authentication-required");
   if (
     status === 403 ||
-    /bad credentials|authentication failed|invalid.*token|token.*(?:invalid|expired)|permission denied|could not read (?:username|password)|write access .*not granted/.test(
+    /bad credentials|authentication failed|invalid.*token|token.*(?:invalid|expired)|permission denied|could not read (?:username|password)|write access .*not granted|repository access (?:changed|was removed)/.test(
       detail,
     )
   ) {

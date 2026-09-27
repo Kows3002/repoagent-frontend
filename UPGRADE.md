@@ -1,57 +1,86 @@
-# Dark workspace upgrade
+# Selected repository access and theme update
 
 This update is implemented in the local project. Deploy the backend first, then the frontend.
 
 ## What changed
 
-- A charcoal workbench with a custom RepoAgent mark, warm accents, clear section numbering, and responsive layouts.
-- System typography: 15px base text, 14px main controls, at least 12px metadata, 13px diff code, and 16px mobile text inputs.
-- Recent jobs can be reopened to review their saved task, diff, status, and actual commit message.
-- The Activity tab shows saved sign-ins, sign-outs, job creation, completion/failure, and approved pushes.
-- Dismissible success/error snackbars. Successful notices disappear after six seconds; hovering or focusing pauses the timer. Inline errors retain recovery controls.
-- Concurrent reads share one request; React StrictMode remains enabled. Preview starts share pending requests. Mutations keep duplicate-click guards.
-- Successful pushes are saved in the database. Repeat approvals return saved success instead of pushing again.
+- Light mode is the default, with dark text and quieter surfaces. The top-right sun/moon button switches themes and remembers your choice in this browser.
+- A simpler repository workspace replaces decorative section labels and promotional copy. Typography stays consistent: 15px body text, 14px controls, at least 12px metadata, 13px diff code, and 16px mobile inputs.
+- Repository access uses a **GitHub App**. Users choose **Only select repositories** on GitHub; the picker offers only connected repositories where they can push.
+- **Manage access** opens GitHub's installation settings. **Add account** connects another account or organization. Returning from GitHub refreshes access once; **Refresh access** is also available.
+- Removing a repository clears a stale selection on refresh. The backend checks access before a job, clone, and push, so an old job cannot bypass revoked access.
+- Existing saved jobs, activity, editable commit messages, previews, notifications, and request deduplication remain available.
 
-## What you need to do
+A normal OAuth App with the broad `repo` scope cannot provide this repository selection model. Changing only the frontend would hide repositories without restricting the credential. This update requires the backend GitHub App configuration below.
 
-1. Back up the existing database.
-2. Deploy/restart the updated backend on Render using its existing start command. Application startup automatically adds the new job columns and the activity_events table. No manual SQL or new environment variables are required.
-3. Keep the existing persistent DATABASE_URL and SESSION_SECRET values. Keep repository workspaces and preview storage persistent if old jobs must remain available for preview or approval after deployments.
-4. Build and deploy the updated frontend:
+## One-time GitHub setup
+
+1. Open [GitHub > Settings > Developer settings > GitHub Apps > New GitHub App](https://github.com/settings/apps/new).
+2. Set **Homepage URL** and **Setup URL** to your frontend URL. Set **Callback URL** to exactly:
+
+   ```text
+   https://repoagent.onrender.com/auth/github/callback
+   ```
+
+3. Leave **Request user authorization (OAuth) during installation** unchecked. RepoAgent starts authorization through its own sign-in button. Keep token expiration enabled. Disable webhooks.
+4. Set repository **Contents: Read and write**; **Metadata: Read-only** is included by GitHub. Leave other permissions off unless needed. GitHub requires additional Workflows write permission to edit workflow files.
+5. Allow installation on **Any account** if other users will use RepoAgent. Create the App, generate a **client secret**, and copy the **Client ID** and App slug. The slug is the last part of `https://github.com/apps/YOUR-SLUG`.
+6. In the **Render backend environment**, set:
+
+   ```dotenv
+   GITHUB_APP_SLUG=your-github-app-slug
+   GITHUB_CLIENT_ID=your-github-app-client-id
+   GITHUB_CLIENT_SECRET=your-github-app-client-secret
+   GITHUB_CALLBACK_URL=https://repoagent.onrender.com/auth/github/callback
+   FRONTEND_URL=https://your-frontend.example
+   CORS_ORIGINS=https://your-frontend.example
+   SESSION_SAME_SITE=none
+   SESSION_HTTPS_ONLY=true
+   ```
+
+   Use GitHub App credentials, not the old OAuth App credentials or the numeric App ID. Keep secrets on the backend. No App private key is needed by this integration.
+
+## Deploy and use it
+
+1. Back up your database. Keep the existing persistent `DATABASE_URL` and `SESSION_SECRET` (or `APP_SECRET`) values.
+2. Deploy/restart the updated backend. Startup adds the GitHub App credential-binding columns automatically. Use matching App configuration on API and worker processes. Existing broad OAuth sessions become signed out; saved job history remains.
+3. Build and deploy the frontend:
 
    ```powershell
    cd C:\Users\91730\RepoAgent\frontend
    npm.cmd run build
    ```
 
-   Publish the generated dist folder using your existing hosting setup. Keep this value in the frontend build environment:
+   Publish `dist` using your existing host. Keep the frontend build variable:
 
    ```dotenv
    VITE_API_URL=https://repoagent.onrender.com
    ```
 
-   For local frontend development, restart with npm.cmd run dev.
-5. Sign in with GitHub. Generate a job, review it, edit the commit message if needed, and approve it. Reopen Recent jobs to see saved results; open Activity to see your account events.
+   For local frontend work, restart `npm.cmd run dev`. A frontend rebuild alone cannot enable the new permissions.
+4. Click **Continue with GitHub**, then **Choose repositories on GitHub**. Select the account, choose **Only select repositories**, pick the projects, and click **Install** or **Save**.
+5. Return to RepoAgent. Access refreshes automatically; click **Refresh access** if needed. Select a repository, describe the task, review the diff/preview, edit the commit message, then approve.
+6. Use **Manage access** to add or remove repositories later. If an installation is set to **All repositories**, the UI explains how to switch it to **Only select repositories**. An organization owner may need to approve access.
+7. After migrating, revoke the **old OAuth App** under **GitHub > Settings > Applications > Authorized OAuth Apps**. Switching server credentials does not revoke that old broad GitHub grant. Keep the new GitHub App authorized.
 
-The activity log begins with this deployment. Earlier jobs retain their data, but unknown historical dates and push outcomes remain unknown. Jobs created before ownership was recorded are not assigned to an account automatically.
+The top-right theme button changes only your browser preference. New visitors start in light mode. Access tokens remain encrypted on the backend and are never stored in browser storage.
 
-## Backend contract
+GitHub App user tokens and sessions last at most eight hours in this implementation; sign in again when asked. Existing branch protections still apply to direct pushes.
 
-- GET /jobs: latest 50 jobs owned by the connected account.
-- GET /auth/activity?limit=20: newest owned activity events.
-- Job responses additionally expose created_at, updated_at, pushed_at, and commit_message. Dates are UTC Unix seconds or null.
-- POST /jobs/{id}/approve still accepts { "commit_message": "Your message" }. Successful responses include the actual commit message and pushed_at.
+## API changes
 
-The database stores users, session records, jobs, generated results, and activity summaries. GitHub credentials remain encrypted on the server. Browser notification messages are temporary.
+- `GET /auth/session` adds `repository_access` setup metadata. `authenticated: false` remains a normal signed-out response.
+- `GET /auth/repositories` returns `{ repositories, has_more, next_cursor, access }`. Follow the opaque cursor, including when an installation page has no writable repositories.
+- `access` includes configuration links and installations with account names, GitHub selection mode, and management URLs.
+- The frontend hides broad repository lists returned by older backends and shows a setup message until the backend is updated.
+- Existing job, preview, activity, and approval endpoints keep their contracts.
 
-## Why Network can still show two rows
+## Verification and limits
 
-An OPTIONS request followed by POST is the browser's CORS preflight, not a duplicate push or logout. Keep it enabled. GET job/preview requests every 2.5 seconds while work is running are intentional status polling. See [MDN's preflight explanation](https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request).
+Validation completed: 45 frontend logic tests and 74 UI tests pass. The production frontend build passes. Backend verification covers 128 distinct tests (127 passed, one existing skip). Automated tests cover selected access, GitHub link validation, cursor pagination, return-to-tab refresh, stale selections, session isolation, and existing job flows. Browser checks verified light mode by default, saved dark mode after reload, both themes on desktop, the 320px mobile layout, and editable commit approval against an isolated fixture. Local browser checks use isolated fixtures, not a live GitHub authorization or real push. Finish the GitHub App registration and deployment before testing with your own account.
 
-Initial reads are now deduplicated even with [React StrictMode's development checks](https://react.dev/reference/react/StrictMode). Activity loads only when its tab is opened.
+An `OPTIONS` request followed by `POST` is the browser's CORS preflight, not a duplicate mutation. Job/preview polling every 2.5 seconds while work runs is intentional.
 
-## Verification
+Keep repository workspaces and preview storage persistent if old previews and approvals must survive deployments. Docker is still required for Vite previews. Background jobs and preview builds remain process-local.
 
-Production build passed. Frontend logic, workflow, notification, history, and request-sharing tests passed. Backend migration, activity ownership, OAuth, and repeated approval tests passed using isolated databases and mocked/local Git operations. Desktop and mobile browser checks used an isolated fixture, including actual static before/after previews; they did not authenticate with or push to a real GitHub repository.
-
-Existing Docker requirements for Vite previews still apply. No new preview infrastructure is introduced by this redesign. Background jobs and preview builds remain process-local and can be interrupted by a backend restart; saved database history survives.
+See [the backend configuration guide](../backend/README.md#configure-github-sign-in) for local callbacks and full deployment details, and [GitHub's App user-token documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app) for its authorization model.

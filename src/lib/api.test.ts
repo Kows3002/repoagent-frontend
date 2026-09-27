@@ -58,6 +58,19 @@ test("malformed job responses cannot accidentally become a live job", () => {
   }
 });
 
+test("failed job polling maps expired and revoked GitHub App access without an HTTP error", () => {
+  for (const [message, kind] of [
+    ["Your GitHub connection expired. Sign in again and create a new job.", "authentication-required"],
+    ["Repository access changed. Choose this repository in your GitHub App installation and allow write access.", "github-access-denied"],
+  ] as const) {
+    const result = normalizeJobResult({ id: 7, status: "failed", ai_result: message });
+    assert.equal(result.error?.kind, kind);
+    assert.equal(result.job.ai_result, null);
+    assert.equal(result.error?.retryable, false);
+    assert.notEqual(result.error?.title, "Connection interrupted");
+  }
+});
+
 test("empty completed diffs explain that no change was generated", () => {
   const result = normalizeJobResult({
     id: 7,

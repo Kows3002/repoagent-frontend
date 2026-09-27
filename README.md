@@ -1,8 +1,8 @@
 ﻿# RepoAgent frontend
 
-A dark, responsive React + TypeScript workbench for GitHub code changes, built with Vite, Tailwind CSS, and Lucide icons. Sign in with GitHub, choose a repository, describe a focused change, compare its diff and rendered UI, then explicitly approve the push.
+A responsive React + TypeScript workbench with light mode by default and an optional dark theme for GitHub code changes, built with Vite, Tailwind CSS, and Lucide icons. Sign in with GitHub, choose a repository, describe a focused change, compare its diff and rendered UI, then explicitly approve the push.
 
-See [the upgrade guide](UPGRADE.md) for the dark redesign, saved activity, request deduplication, and backend-first deployment steps.
+See [the upgrade guide](UPGRADE.md) for selected repository access, theme switching, and the required GitHub App setup and deployment steps.
 
 ## Run locally
 
@@ -36,11 +36,11 @@ The frontend can render without a backend, but sign-in, repository selection, ge
 
 ## GitHub sign-in
 
-Register a GitHub OAuth App with local callback URL `http://127.0.0.1:5173/auth/github/callback`. The login and callback use Vite's `/auth` proxy. Set the backend's `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`, `FRONTEND_URL`, and persistent `SESSION_SECRET` or `APP_SECRET`; see [backend setup](../backend/README.md#configure-github-sign-in). Do not put OAuth secrets in frontend environment variables.
+Register a **GitHub App**, with **Contents: Read and write** repository permission, using [the setup guide](UPGRADE.md#one-time-github-setup). For the local same-origin Vite proxy, register callback `http://127.0.0.1:5173/auth/github/callback`; login and callback both use Vite's `/auth` proxy. Set backend `GITHUB_APP_SLUG`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`, `FRONTEND_URL`, and persistent `SESSION_SECRET` or `APP_SECRET`. Use the GitHub App Client ID, not its numeric App ID or old OAuth App credentials. Do not put secrets in frontend environment variables.
 
-Use the same host consistently for the workspace, login, and callback; do not mix `localhost` and `127.0.0.1`. The repository picker lists repositories the connected account can push to, supports filtering the loaded list, and offers pagination. Users do not paste repository URLs or personal access tokens.
+Use the same host consistently for the workspace, login, and callback; do not mix `localhost` and `127.0.0.1`. After signing in, use **Choose repositories on GitHub**, choose **Only select repositories**, and install the App for those projects. The picker lists only App-authorized repositories where the connected account can push. **Manage access** changes that selection on GitHub; returning to RepoAgent refreshes it, and **Refresh access** is available manually. Users do not paste repository URLs or personal access tokens. Existing broad OAuth sessions require a fresh GitHub App sign-in after upgrading.
 
-The browser receives a signed HttpOnly cookie containing an opaque session identifier. Session data lives in the backend database and expires after at most seven days. GitHub OAuth credentials stay encrypted on the backend. The frontend keeps the session's CSRF value only in module memory and sends it as `X-CSRF-Token` on mutations; no access token is stored in browser storage.
+The browser receives a signed HttpOnly cookie containing an opaque session identifier. Session data lives in the backend database and expires after at most eight hours. GitHub App user credentials stay encrypted on the backend. The frontend keeps the session's CSRF value only in module memory and sends it as `X-CSRF-Token` on mutations; no access token is stored in browser storage.
 
 ## Connect to the Render API
 
@@ -62,7 +62,7 @@ SESSION_SAME_SITE=none
 SESSION_HTTPS_ONLY=true
 ```
 
-The GitHub OAuth app must register that exact Render callback URL. The API also needs GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, its persistent SESSION_SECRET (or APP_SECRET), and the existing database/AI configuration. The frontend URL alone does not configure OAuth. Replace FRONTEND_URL and CORS_ORIGINS with the actual frontend origin for a deployed workspace; never use a wildcard with credentialed CORS.
+The GitHub App must register that exact Render callback URL. The API also needs GITHUB_APP_SLUG, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, its persistent SESSION_SECRET (or APP_SECRET), and the existing database/AI configuration. The frontend URL alone does not configure OAuth. Replace FRONTEND_URL and CORS_ORIGINS with the actual frontend origin for a deployed workspace; never use a wildcard with credentialed CORS.
 
 Browser third-party-cookie blocking can still prevent sessions across different sites. A same-origin reverse proxy is the preferred deployment when those browsers must be supported: set VITE_API_URL empty, proxy /auth and /jobs to Render, and register the proxy origin's callback instead.
 
@@ -96,8 +96,8 @@ The backend must use the matching preview hostname and scheme. DNS and the rever
 | --- | --- |
 | `GET /auth/github/login` | Browser navigation starts GitHub OAuth. |
 | `GET /auth/github/callback` | Completes OAuth and redirects back to the workspace. |
-| `GET /auth/session` | Returns `{ authenticated, configured, user, csrf_token? }`. An authenticated user includes `id`, `login`, `name`, and `avatar_url`. |
-| `GET /auth/repositories?page=1` | Returns `{ repositories, has_more, next_page }` for the connected account. |
+| `GET /auth/session` | Returns `{ authenticated, configured, user, csrf_token?, repository_access }`. An authenticated user includes `id`, `login`, `name`, and `avatar_url`. |
+| `GET /auth/repositories?cursor=...` | Returns `{ repositories, has_more, next_cursor, access }` for authorized App installations. Omit the cursor initially. |
 | `POST /auth/logout` | Invalidates the database session and clears the cookie. |
 | `GET /auth/activity` | Lists account-owned sign-in, generation, and push activity. |
 | `GET /jobs` | Lists the newest 50 owned jobs for the Recent jobs panel. |
@@ -128,16 +128,18 @@ Tests use mocked requests and cover session/CSRF handling, repository selection 
 
 ## UI structure
 
-- `Header`: sticky branding, Workspace/Activity navigation, account controls, and workflow help.
+- `Header`: sticky branding, Workspace/Activity navigation, account controls, workflow help, and the light/dark theme switch.
 - `HistoryPanel`, `ActivityPanel`, `useHistory`: database-backed job restoration and lazy account activity.
 - `SnackbarProvider`: accessible success/error notifications with dismissal and paused timers.
 - `lib/requests.ts`: in-flight request sharing with subscriber cancellation and session isolation.
-- `RepoForm`, `RepositoryPicker`, `TaskInput`: account repositories and precise tasks.
+- `RepoForm`, `RepositoryPicker`, `TaskInput`: selected GitHub App repositories, access management, and precise tasks.
 - `StatusTimeline`, `DiffViewer`, `ErrorAlert`, `ApproveCard`: progress, review, friendly errors, and explicit approval.
 - `PreviewPanel`, `usePreview`: real current/updated UI previews, route navigation, and build status.
 - `useAuth`: session loading, identity, availability, sign-out, and expiry.
 - `useJob`: submission, polling, cancellation, reconnect, and duplicate-click protection.
 - `lib/auth.ts`: shared credentialed transport and memory-only CSRF handling.
+
+Light mode is the default. The top-right theme switch remembers only the theme preference in local storage; account credentials never enter browser storage.
 
 Signing out clears the visible job and stops polling. A 401 returns the workspace to sign-in. Task, analysis, and diff content are rendered as text; repository HTML runs only inside isolated preview frames. The initial sample diff is labeled as an example.
 

@@ -57,7 +57,7 @@ export default function PreviewPanel({job}: {job: Job | null}) {
   const ready = preview.status === "ready" && before && after;
   const building = job?.status === "completed" && ["idle", "building"].includes(preview.status) && !error;
   return <section className="card preview-panel" aria-labelledby="preview-title">
-    <div className="section-heading"><div><span className="eyebrow">04 / SEE IT IN ACTION</span><h2 id="preview-title">See the change. Before you ship.</h2></div><span className={"status-pill " + (ready ? "status-completed" : building ? "status-generating" : "status-idle")}><span className="status-dot"/>{ready ? "Preview ready" : building ? "Preparing previews" : "Visual preview"}</span></div>
+    <div className="section-heading"><div><span className="eyebrow">PREVIEW</span><h2 id="preview-title">Interface preview</h2></div><span className={"status-pill " + (ready ? "status-completed" : building ? "status-generating" : "status-idle")}><span className="status-dot"/>{ready ? "Preview ready" : building ? "Preparing previews" : "Visual preview"}</span></div>
     <div className="preview-description"><p>Compare the current interface with your updated version. Both stay separate from your live repository.</p><span><Code2 size={13}/> Code diff available above</span></div>
     <div className="preview-toolbar">
       <div className="segmented-control" role="group" aria-label="Preview layout">
@@ -78,7 +78,7 @@ export default function PreviewPanel({job}: {job: Job | null}) {
       </div>
     ) : <div className="preview-empty">
       <div className="preview-empty-icon"><Eye size={24}/></div>
-      <h3>{building ? "Preparing both versions of your app" : preview.status === "unsupported" ? "This project needs a different preview setup" : preview.status === "failed" ? "The preview could not be built" : "A side-by-side look at what changes"}</h3>
+      <h3>{building ? "Preparing both versions of your app" : preview.status === "unsupported" ? "This project needs a different preview setup" : preview.status === "failed" ? "The preview could not be built" : "Current and updated interface"}</h3>
       <p>{building ? "Building the original and updated interfaces. Your code diff is already available to review." : preview.message || (job && job.status !== "completed" ? "The current and updated interfaces will appear here when your code change is ready." : "Sign in, choose a repository, and generate a change. We will prepare a preview of each version for you.")}</p>
       {["failed", "unsupported"].includes(preview.status) ? <button className="text-button" onClick={retry}><RefreshCw size={13}/>Try preview again</button> : <div className="preview-empty-pair" aria-hidden="true"><span>Current <span className="mini-browser"><i/><i/><i/></span></span><ArrowRight size={18}/><span>Updated <span className="mini-browser mini-browser-new"><i/><i/><i/></span></span></div>}
     </div>}

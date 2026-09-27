@@ -1,5 +1,5 @@
 import { ApiError, friendlyError, mapError, type ErrorContext } from "./errors";
-import type { GitHubRepository, GitHubSession, RepositoryPage } from "./types";
+import type { GitHubRepository, GitHubSession, RepositoryAccess, RepositoryInstallation, RepositoryPage } from "./types";
 import { isValidGitHubUrl } from "./validation";
 import { resolveApiBaseUrl } from "./config";
 import { clearSharedRequests, shareRequest } from "./requests";
@@ -92,6 +92,35 @@ function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 
+// Only GitHub installation pages may be opened from server-provided metadata.
+function installationUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (url.origin !== "https://github.com" || url.username || url.password || url.search || url.hash) return null;
+    if (!/^\/(?:apps\/[a-z\d-]+\/installations\/new|settings\/installations(?:\/\d+)?|organizations\/[a-z\d-]+\/settings\/installations(?:\/\d+)?)\/?$/i.test(url.pathname)) return null;
+    return url.href;
+  } catch { return null; }
+}
+
+function repositoryAccess(value: unknown): RepositoryAccess | null {
+  const data = object(value);
+  if (typeof data.configured !== "boolean") return null;
+  const installations: RepositoryInstallation[] = [];
+  for (const item of Array.isArray(data.installations) ? data.installations : []) {
+    const installation = object(item);
+    const manageUrl = installationUrl(installation.manage_url);
+    if (typeof installation.id !== "number" || !Number.isSafeInteger(installation.id) || installation.id <= 0 || typeof installation.account !== "string" || !installation.account || !manageUrl || !["selected", "all"].includes(String(installation.repository_selection))) continue;
+    installations.push({ id: installation.id, account: installation.account, repository_selection: installation.repository_selection as "selected" | "all", manage_url: manageUrl });
+  }
+  return {
+    configured: data.configured,
+    installation_url: installationUrl(data.installation_url),
+    manage_url: installationUrl(data.manage_url) ?? "https://github.com/settings/installations",
+    installations,
+  };
+}
+
 export async function getGitHubSession(signal?: AbortSignal): Promise<GitHubSession> {
   const version = sessionVersion;
   const data = object(await sessionRequest("/auth/session", { signal }));
@@ -106,9 +135,10 @@ export async function getGitHubSession(signal?: AbortSignal): Promise<GitHubSess
   // Older session endpoints omit this optional availability hint. A successful
   // signed-out response still permits login unless the server disables it.
   const configured = data.configured !== false;
+  const access = repositoryAccess(data.repository_access);
   if (data.authenticated === false) {
     setSessionCsrfToken(null);
-    return { authenticated: false, configured, user: null };
+    return { authenticated: false, configured, user: null, ...(access ? { repository_access: access } : {}) };
   }
   const user = object(data.user);
   if (typeof user.id !== "number" || !Number.isFinite(user.id) || typeof user.login !== "string" || !user.login || typeof data.csrf_token !== "string" || !data.csrf_token) {
@@ -118,6 +148,7 @@ export async function getGitHubSession(signal?: AbortSignal): Promise<GitHubSess
   return {
     authenticated: true,
     configured,
+    ...(access ? { repository_access: access } : {}),
     user: {
       id: typeof user.user_id === "number" ? user.user_id : user.id,
       github_id: typeof user.github_id === "number" ? user.github_id : user.id,
@@ -133,11 +164,15 @@ export async function signOutGitHub(signal?: AbortSignal): Promise<void> {
   setSessionCsrfToken(null);
 }
 
-export async function getGitHubRepositories(page = 1, signal?: AbortSignal): Promise<RepositoryPage> {
-  const data = object(await sessionRequest(`/auth/repositories?page=${page}`, { signal }, "repositories"));
+export async function getGitHubRepositories(page: number | string = 1, signal?: AbortSignal): Promise<RepositoryPage> {
+  const query = typeof page === "string" ? `cursor=${encodeURIComponent(page)}` : `page=${page}`;
+  const data = object(await sessionRequest(`/auth/repositories?${query}`, { signal }, "repositories"));
   if (!Array.isArray(data.repositories)) throw new ApiError(friendlyError("service-unavailable"));
+  const access = repositoryAccess(data.access);
   const repositories: GitHubRepository[] = [];
-  for (const value of data.repositories) {
+  // An older API lists every OAuth repository. Require the new access contract
+  // before showing results; repository authorization is enforced by the backend.
+  for (const value of access?.configured ? data.repositories : []) {
     const repository = object(value);
     if ((typeof repository.id !== "number" && typeof repository.id !== "string") || typeof repository.full_name !== "string" || typeof repository.clone_url !== "string" || !isValidGitHubUrl(repository.clone_url)) continue;
     repositories.push({
@@ -150,10 +185,13 @@ export async function getGitHubRepositories(page = 1, signal?: AbortSignal): Pro
       language: typeof repository.language === "string" ? repository.language : null,
     });
   }
-  const hasMore = data.has_more === true;
+  const hasMore = access?.configured === true && data.has_more === true;
+  const nextCursor = hasMore && typeof data.next_cursor === "string" && data.next_cursor.length > 0 && data.next_cursor.length <= 2048 ? data.next_cursor : null;
   return {
     repositories,
     has_more: hasMore,
-    next_page: hasMore ? (typeof data.next_page === "number" && Number.isInteger(data.next_page) && data.next_page > page ? data.next_page : page + 1) : null,
+    next_page: hasMore && !nextCursor && typeof page === "number" && typeof data.next_page === "number" && Number.isInteger(data.next_page) && data.next_page > page ? data.next_page : null,
+    next_cursor: nextCursor,
+    access,
   };
 }

@@ -4,6 +4,7 @@ import { getCsrfHeaders, getGitHubRepositories, getGitHubSession, hasSessionCsrf
 import { ApiError } from "./errors";
 
 beforeEach(() => setSessionCsrfToken(null));
+const access = { configured: true, installation_url: "https://github.com/apps/repoagent-test/installations/new", manage_url: "https://github.com/settings/installations", installations: [{ id: 12, account: "octocat", repository_selection: "selected", manage_url: "https://github.com/settings/installations/12" }] };
 
 test("session responses retain only public identity and initialize in-memory CSRF", async (context) => {
   context.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
@@ -48,7 +49,7 @@ test("repository pages preserve pagination and reject unsafe clone URLs", async 
     return new Response(JSON.stringify({ repositories: [
       { id: 1, full_name: "team/private-project", clone_url: "https://github.com/team/private-project.git", default_branch: "develop", private: true, language: "TypeScript", access_token: "never-return" },
       { id: 2, full_name: "team/unsafe", clone_url: "https://token@github.com/team/unsafe.git" },
-    ], has_more: true, next_page: 3 }));
+    ], has_more: true, next_page: 3, access }));
   });
   const page = await getGitHubRepositories(2);
   assert.deepEqual(urls, ["/auth/repositories?page=2"]);
@@ -134,4 +135,54 @@ test("network, timeout, and HTTP500 failures remain connection errors", async (c
       return true;
     });
   }
+});
+
+test("old or unconfigured repository APIs never expose their broad results", async (context) => {
+  const responses = [
+    { repositories: [{ id: 1, full_name: "team/private", clone_url: "https://github.com/team/private.git" }], has_more: true },
+    { repositories: [{ id: 1, full_name: "team/private", clone_url: "https://github.com/team/private.git" }], has_more: true, access: { ...access, configured: false } },
+  ];
+  context.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify(responses.shift())));
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await getGitHubRepositories();
+    assert.deepEqual(result.repositories, []);
+    assert.equal(result.has_more, false);
+    assert.equal(result.next_cursor, null);
+  }
+});
+
+test("selected access metadata retains only safe GitHub installation URLs", async (context) => {
+  context.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
+    repositories: [], has_more: false,
+    access: { ...access, installation_url: "https://github.com.evil.example/apps/repoagent/installations/new", manage_url: "javascript:alert(1)",
+      installations: [
+        ...access.installations,
+        { id: 20, account: "team", repository_selection: "selected", manage_url: "https://github.com/organizations/team/settings/installations/20" },
+        { id: 21, account: "unsafe", repository_selection: "all", manage_url: "https://token@github.com/settings/installations/21" },
+        { id: 22, account: "redirect", repository_selection: "all", manage_url: "https://github.com/settings/installations/22?redirect=https://evil.example" },
+      ] },
+  })));
+  const result = await getGitHubRepositories();
+  assert.equal(result.access?.installation_url, null);
+  assert.equal(result.access?.manage_url, "https://github.com/settings/installations");
+  assert.deepEqual(result.access?.installations.map(installation => installation.account), ["octocat", "team"]);
+});
+
+test("installation pagination treats opaque cursors as encoded query values", async (context) => {
+  const urls: string[] = [];
+  context.mock.method(globalThis, "fetch", async (url: string) => {
+    urls.push(url);
+    return new Response(JSON.stringify({ repositories: [], access, has_more: true, next_cursor: "next/installation+page=2" }));
+  });
+  const result = await getGitHubRepositories("install=12&page=2");
+  assert.deepEqual(urls, ["/auth/repositories?cursor=install%3D12%26page%3D2"]);
+  assert.equal(result.next_cursor, "next/installation+page=2");
+  assert.equal(result.next_page, null);
+});
+
+test("session metadata exposes installation setup without browser credentials", async (context) => {
+  context.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ authenticated: false, configured: true, repository_access: { ...access, access_token: "secret-installation-token" } })));
+  const session = await getGitHubSession();
+  assert.equal(session.repository_access?.installation_url, access.installation_url);
+  assert.equal(JSON.stringify(session).includes("secret-installation-token"), false);
 });

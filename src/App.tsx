@@ -8,7 +8,6 @@ import {
   FileDiff,
   Github,
   GitCommitHorizontal,
-  Lightbulb,
   LockKeyhole,
   Search,
   ShieldCheck,
@@ -42,27 +41,27 @@ const statusCopy: Record<
   { title: string; detail: string; label: string }
 > = {
   queued: {
-    title: "Your change is in the queue.",
-    detail: "The agent will pick up your task shortly.",
+    title: "Job queued",
+    detail: "Waiting to process your request.",
     label: "Queued",
   },
   analyzing: {
-    title: "Getting to know your code.",
+    title: "Analyzing repository",
     detail: "Finding the right files and understanding your request.",
     label: "Analyzing",
   },
   generating: {
-    title: "Putting your change together.",
+    title: "Generating patch",
     detail: "Preparing a focused patch for you to review.",
     label: "Generating patch",
   },
   completed: {
-    title: "Your change is ready.",
-    detail: "Take a look at the diff. The final call is yours.",
+    title: "Ready for review",
+    detail: "Review the diff and previews before approving the commit.",
     label: "Completed",
   },
   failed: {
-    title: "This change needs another look.",
+    title: "Change could not be generated",
     detail: "See the details below, then adjust your request.",
     label: "Failed",
   },
@@ -124,7 +123,7 @@ function Workspace() {
     previousAccount.current = currentAccount;
   }, [auth.loading, auth.user, reset]);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [showExample, setShowExample] = useState(true);
+  const [showExample, setShowExample] = useState(false);
   const busy = phase === "submitting" || phase === "active" || isApproving || auth.loggingOut;
   const displayStatus = phase === "failed" ? "failed" : job?.status;
   const state = displayStatus ? statusCopy[displayStatus] : null;
@@ -151,18 +150,12 @@ function Workspace() {
         <div className="breadcrumb">
           <span className="workspace-slash">/</span> {auth.user?.username || "Personal workspace"} <ChevronRight size={13} />
           <span>{view === "activity" ? "Activity log" : "Repository changes"}</span>
-          <span className="workspace-label"><span className={"status-dot" + (auth.user ? " connected-dot" : "")} />{auth.user ? "GITHUB CONNECTED" : "AWAITING CONNECTION"}</span>
+          <span className="workspace-label"><span className={"status-dot" + (auth.user ? " connected-dot" : "")} />{auth.user ? "GitHub connected" : "Not signed in"}</span>
         </div>
         <section className="page-intro" aria-labelledby="page-title">
           <div>
-            <div className="intro-kicker"><span className="intro-index">{view === "activity" ? "02" : "01"}</span> {view === "activity" ? "THE RECORD" : "THE WORKBENCH"}</div>
-            <h1 id="page-title">{view === "activity" ? "A record of your work." : <>Small changes.<br className="mobile-break" /> <span>Full control.</span></>}</h1>
-            <p>{view === "activity" ? "Sign-ins, code changes, and approved commits. Saved to your account." : "A focused place to change your code. Review every line. Ship when ready."}</p>
-          </div>
-          <div className="workspace-guide" aria-label="Workflow">
-            <span><i>01</i> Describe the change</span>
-            <span><i>02</i> Inspect the difference</span>
-            <span><i>03</i> Approve the commit <ArrowRight size={14} /></span>
+            <h1 id="page-title">{view === "activity" ? "Activity log" : "Repository workspace"}</h1>
+            <p>{view === "activity" ? "Sign-ins, code changes, and approved commits saved to your account." : "Choose a repository, describe a change, and review it before you push."}</p>
           </div>
         </section>
         <div hidden={view !== "workspace"}>
@@ -174,11 +167,11 @@ function Workspace() {
             ) : !auth.user ? (
               <section className="card auth-card" aria-labelledby="sign-in-title">
                 <Github size={24} />
-                <h2 id="sign-in-title">Your GitHub. Your changes.</h2>
-                <p>Sign in to generate a change, review the diff, and push to your repository’s default branch when you approve.</p>
+                <h2 id="sign-in-title">Connect your GitHub account</h2>
+                <p>Sign in, then choose which repositories RepoAgent can access on GitHub. You review and approve every change before it is pushed.</p>
                 {auth.configured ? <a className="button button-dark" href={githubLoginUrl}>
                   <Github size={17} /> Continue with GitHub <ArrowRight size={16} />
-                </a> : <><button className="button button-dark" disabled><Github size={17} /> Continue with GitHub</button><p className="field-hint">GitHub sign-in is not available yet. The workspace owner needs to finish connecting GitHub.</p></>}
+                </a> : <><button className="button button-dark" disabled><Github size={17} /> Continue with GitHub</button><p className="field-hint">GitHub sign-in is not available yet. The workspace owner needs to configure the RepoAgent GitHub App.</p></>}
               </section>
             ) : null}
             <RepoForm
@@ -189,16 +182,6 @@ function Workspace() {
               authenticated={Boolean(auth.user) && auth.csrfReady && !auth.loading}
               accountId={auth.user?.github_id}
             />
-            <aside className="prompt-tip">
-              <Lightbulb size={17} />
-              <div>
-                <h3>A little precision goes a long way.</h3>
-                <p>
-                  Name the file. Describe the change. Tell us what to leave
-                  alone.
-                </p>
-              </div>
-            </aside>
             {auth.user ? <HistoryPanel jobs={history.jobs} selectedId={job?.id} loading={history.loading} error={history.error}
               onSelect={openHistoryJob} onRefresh={() => void history.refresh()} disabled={busy} /> : null}
           </div>
@@ -206,7 +189,7 @@ function Workspace() {
             <section className="card status-card" aria-labelledby="job-title">
               <div className="section-heading">
                 <div>
-                  <span className="eyebrow">EXECUTION / 02</span>
+                  <span className="eyebrow">EXECUTION</span>
                   <h2 id="job-title">Live job</h2>
                 </div>
                 <span
@@ -228,17 +211,17 @@ function Workspace() {
                 >
                   <h3>
                     {isPushed
-                      ? "One more good change, shipped."
+                      ? "Change pushed to GitHub"
                       : state?.title ||
                         (phase === "submitting"
                           ? "Starting your change…"
-                          : "Ready when you are.")}
+                          : "No active job")}
                   </h3>
                   <p>
                     {isPushed
                       ? "Your repository is up to date with your approved change."
                       : state?.detail ||
-                        "Add your repository and a task to get things moving."}
+                        "Choose a repository and describe a change to start a job."}
                   </p>
                 </div>
                 <StatusTimeline status={displayStatus} />
@@ -275,7 +258,7 @@ function Workspace() {
                             : job?.status === "completed"
                               ? "Complete"
                               : "Waiting for your task"}
-                    <span className="analysis-dots">···</span>
+                    
                   </span>
                 </div>
                 {job ? (
@@ -312,8 +295,8 @@ function Workspace() {
             >
               <div className="section-heading">
                 <div>
-                  <span className="eyebrow">PATCH / 03</span>
-                  <h2 id="review-title">The change, in detail</h2>
+                  <span className="eyebrow">REVIEW</span>
+                  <h2 id="review-title">Code changes</h2>
                 </div>
                 <span className="heading-icon">
                   <FileDiff size={19} />
@@ -334,25 +317,24 @@ function Workspace() {
                     </div>
                     <h3>
                       {job?.status === "completed"
-                        ? "No lines to change."
+                        ? "No changes generated"
                         : job?.status === "failed"
-                          ? "A fresh start is one task away."
-                          : "Every line. In plain sight."}
+                          ? "No patch available"
+                          : "Your diff will appear here"}
                     </h3>
                     <p>
                       {job?.status === "completed"
                         ? "The requested text may already match your repository."
                         : job?.status === "failed"
                           ? "Update your request and generate a new change."
-                          : "Your generated patch will appear here.\nSee exactly what changes before you approve."}
+                          : "Added and removed lines will be highlighted for review."}
                     </p>
                   </div>
                   {!job && phase === "idle" ? (
                     <div className="sample-patch">
                       <div className="sample-heading">
                         <span>
-                          <span className="sample-dot" /> A SMALL CHANGE, FOR
-                          EXAMPLE
+                          <span className="sample-dot" /> Example diff
                         </span>
                         <button
                           className="text-button"
@@ -402,7 +384,7 @@ function Workspace() {
             <span className="footer-mark">
               <Code2 size={13} />
             </span>{" "}
-            REPOAGENT / REPOSITORY WORKSPACE
+            RepoAgent / Repository workspace
           </span>
           <span>
             Describe <ArrowRight size={11} /> Review <ArrowRight size={11} />{" "}
@@ -411,9 +393,9 @@ function Workspace() {
         </footer>
       </main>
       {helpOpen ? (
-        <Modal title="From intent to commit" onClose={() => setHelpOpen(false)}>
+        <Modal title="How RepoAgent works" onClose={() => setHelpOpen(false)}>
           <p className="help-intro">
-            A small, deliberate workflow for making changes to your code.
+            Connect a repository, generate a patch, and review it before pushing.
           </p>
           <div className="help-steps">
             <div>
@@ -423,7 +405,7 @@ function Workspace() {
               <section>
                 <h3>01. Describe your change</h3>
                 <p>
-                  Continue with GitHub, then choose one of your repositories.
+                  Continue with GitHub, then select repositories in the GitHub App installation settings.
                   Name the exact file and the change you want.
                 </p>
               </section>
@@ -456,15 +438,14 @@ function Workspace() {
           <div className="security-note">
             <Check size={18} />
             <p>
-              You stay in control. Generating a patch never pushes it
-              automatically.
+              Generating a patch never pushes it automatically.
             </p>
           </div>
           <button
             className="button button-primary modal-action"
             onClick={() => setHelpOpen(false)}
           >
-            Let’s make a change <ArrowRight size={16} />
+            Back to workspace <ArrowRight size={16} />
           </button>
         </Modal>
       ) : null}

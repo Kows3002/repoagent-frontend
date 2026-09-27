@@ -24,13 +24,13 @@ export default function RepoForm({ onSubmit, busy, isSubmitting, authenticated, 
   }
 
   return <section className="card form-card" aria-labelledby="configuration-title">
-    <div className="section-heading"><div><span className="eyebrow">REQUEST / 01</span><h2 id="configuration-title">Start a new change</h2></div><span className="heading-icon"><Terminal size={19} /></span></div>
+    <div className="section-heading"><div><h2 id="configuration-title">New change</h2></div><span className="heading-icon"><Terminal size={19} /></span></div>
     <form onSubmit={handleSubmit} noValidate>
       <div className="form-body">
         {authenticated ? <RepositoryPicker accountId={accountId ?? "connected-account"} selected={repository} onChange={setRepository} disabled={busy} /> : <div className="field">
           <label htmlFor="disconnected-repository">GitHub repository</label>
           <button id="disconnected-repository" type="button" className="repository-trigger" disabled><GitFork size={17} /><span>Connect GitHub to choose a repository</span></button>
-          <p className="field-hint">Your repositories will appear here after you sign in.</p>
+          <p className="field-hint">Sign in, then choose which repositories to connect on GitHub.</p>
         </div>}
         <TaskInput value={task} onChange={setTask} disabled={busy} />
       </div>

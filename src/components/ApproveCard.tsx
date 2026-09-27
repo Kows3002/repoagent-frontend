@@ -48,7 +48,7 @@ export default function ApproveCard({
           <h3 id="approve-title">
             {isPushed
               ? "Changes pushed successfully"
-              : "Looks good? Make it official."}
+              : "Approve this change"}
           </h3>
           <p>
             {isPushed

@@ -15,7 +15,7 @@ describe("visual preview review",()=>{
  it("does not fetch or invent rendered previews before a completed job",async()=>{
   await mount(null);
   expect(fetchPreview).not.toHaveBeenCalled();
-  expect(screen.getByText("A side-by-side look at what changes")).toBeTruthy();
+  expect(screen.getByText("Current and updated interface")).toBeTruthy();
   expect(document.querySelector("iframe")).toBeNull();
  });
  it("shows isolated current and updated frames with no same-origin or popup privileges",async()=>{

@@ -30,12 +30,29 @@ export interface GitHubSession {
   authenticated: boolean;
   configured: boolean;
   user: User | null;
+  repository_access?: RepositoryAccess;
+}
+
+export interface RepositoryInstallation {
+  id: number;
+  account: string;
+  repository_selection: "selected" | "all";
+  manage_url: string;
+}
+
+export interface RepositoryAccess {
+  configured: boolean;
+  installation_url: string | null;
+  manage_url: string;
+  installations: RepositoryInstallation[];
 }
 
 export interface RepositoryPage {
   repositories: GitHubRepository[];
   has_more: boolean;
   next_page: number | null;
+  next_cursor: string | null;
+  access: RepositoryAccess | null;
 }
 
 export interface Job {

@@ -40,7 +40,7 @@ describe("RepoAgent signed-in workflow",()=>{
   activityFetch=vi.fn(async()=>response(savedActivity));
   vi.stubGlobal("fetch",vi.fn(async(url:string,options?:RequestInit)=>{
    if(url==="/auth/session")return response({authenticated:signedIn,configured:true,user:signedIn?{...USER,login:USER.username,name:"Octocat"}:null,csrf_token:signedIn?"test-csrf":undefined});
-   if(url.startsWith("/auth/repositories"))return response({repositories:[REPO],has_more:false,next_page:null});
+   if(url.startsWith("/auth/repositories"))return response({repositories:[REPO],has_more:false,next_page:null,access:{"configured":true,"installation_url":"https://github.com/apps/repoagent-test/installations/new","manage_url":"https://github.com/settings/installations","installations":[{"id":1,"account":"octocat","repository_selection":"selected","manage_url":"https://github.com/settings/installations/1"}]}});
    if(url==="/jobs" && options?.method!=="POST")return historyFetch(url,options);
    if(url==="/auth/activity")return activityFetch(url,options);
    if(url==="/auth/logout"){signedIn=false;return new Response(null,{status:204});}
@@ -55,7 +55,7 @@ describe("RepoAgent signed-in workflow",()=>{
   expect(document.querySelector('input[type="password"]')).toBeNull();
   expect(screen.queryByLabelText("GitHub Personal Access Token")).toBeNull();
   expect((screen.getByRole("button",{name:"Generate Code Change"}) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByRole("heading",{name:"See the change. Before you ship."})).toBeTruthy();
+  expect(screen.getByRole("heading",{name:"Interface preview"})).toBeTruthy();
  });
  it("offers GitHub sign-in and prevents generating while signed out",async()=>{
   signedIn=false;await mount();
@@ -72,7 +72,7 @@ describe("RepoAgent signed-in workflow",()=>{
   signedIn=false;
   vi.mocked(fetch).mockResolvedValueOnce(response(payload));
   render(<App/>);
-  await screen.findByRole("heading",{name:"Your GitHub. Your changes."});
+  await screen.findByRole("heading",{name:"Connect your GitHub account"});
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByText("Connection interrupted")).toBeNull();
   if(configured){
