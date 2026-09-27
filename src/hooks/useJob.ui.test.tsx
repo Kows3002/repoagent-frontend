@@ -85,6 +85,7 @@ describe("useJob lifecycle", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const signal = (fetchMock.mock.calls[1][1] as RequestInit).signal;
     unmount();
+    await Promise.resolve();
     expect(signal?.aborted).toBe(true);
     await act(async () => {
       resolvePoll(json({ id: 1, status: "completed", diff: "-old\n+new" }));
@@ -143,7 +144,7 @@ describe("useJob lifecycle", () => {
     expect(result.current.error).toBeNull();
     expect(result.current.phase).toBe("completed");
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/jobs/",
+      "/jobs",
       "/jobs/1",
       "/jobs/1",
     ]);
@@ -186,6 +187,10 @@ describe("useJob lifecycle", () => {
     expect(result.current.phase).toBe("failed");
     await act(() => vi.advanceTimersByTimeAsync(15_000));
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    act(() => {
+      expect(result.current.selectJob({id: 2, status: "completed", diff: "-old\n+new", ai_result: null})).toBe(true);
+    });
+    expect(result.current.job?.id).toBe(2);
   });
   it("stores the actual committed message and clears it for a new job and logout", async () => {
     const fetchMock = vi.fn()
@@ -235,6 +240,35 @@ describe("useJob lifecycle", () => {
     expect(result.current.approvedCommitMessage).toBeNull();
     expect(result.current.isPushed).toBe(false);
     expect(result.current.job).toBeNull();
+  });
+
+  it("restores pushed history without allowing a second approval", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const {result} = renderHook(() => useJob());
+    act(() => {
+      expect(result.current.selectJob({id: 42, status: "completed", diff: "-old\n+new", ai_result: null, pushed_at: 1700000000, commit_message: "Saved message"})).toBe(true);
+    });
+    expect(result.current.phase).toBe("completed");
+    expect(result.current.isPushed).toBe(true);
+    expect(result.current.approvedCommitMessage).toBe("Saved message");
+    await act(async () => { await result.current.approve("Do not push again"); });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("resumes polling an active historical job and prevents switching while it runs", async () => {
+    let resolvePoll!: (value: Response) => void;
+    const fetchMock = vi.fn().mockReturnValue(new Promise<Response>(resolve => {resolvePoll = resolve;}));
+    vi.stubGlobal("fetch", fetchMock);
+    const {result} = renderHook(() => useJob());
+    act(() => {
+      expect(result.current.selectJob({id: 42, status: "queued", diff: null, ai_result: null})).toBe(true);
+      expect(result.current.selectJob({id: 43, status: "failed", diff: null, ai_result: null})).toBe(false);
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe("/jobs/42");
+    await act(async () => { resolvePoll(json({id:42, status:"completed", diff:"-old\n+new"})); });
+    expect(result.current.job?.id).toBe(42);
+    expect(result.current.phase).toBe("completed");
   });
 
 });

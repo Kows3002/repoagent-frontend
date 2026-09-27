@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { approveJob, createJob, getJob } from "../lib/api";
+import { approveJob, createJob, getJob, normalizeJobResult } from "../lib/api";
 import { DEFAULT_COMMIT_MESSAGE } from "../lib/commit";
 import { friendlyError, isAbortError, mapError } from "../lib/errors";
 import type {
@@ -57,6 +57,9 @@ export function useJob() {
       jobRef.current = nextJob;
       setJob(nextJob);
       setError(nextError);
+      pushed.current = nextJob.pushed_at != null;
+      setIsPushed(pushed.current);
+      setApprovedCommitMessage(pushed.current ? nextJob.commit_message ?? null : null);
       setPhase(
         nextJob.status === "completed" || nextJob.status === "failed"
           ? nextJob.status
@@ -183,6 +186,9 @@ export function useJob() {
       pushed.current = true;
       setIsPushed(true);
       setApprovedCommitMessage(committed);
+      const updated = {...currentJob, pushed_at: Date.now() / 1000, commit_message: committed};
+      jobRef.current = updated;
+      setJob(updated);
     } catch (failure) {
       if (
         !mounted.current ||
@@ -214,6 +220,20 @@ export function useJob() {
     setApprovedCommitMessage(null);
   }, [cancelRequests]);
 
+  const selectJob = useCallback((selected: Job): boolean => {
+    const active = jobRef.current;
+    if (submitting.current || approving.current ||
+      (active && active.status !== "completed" && active.status !== "failed" && phase !== "failed")) return false;
+    cancelRequests();
+    setApprovalError(null);
+    setIsApproving(false);
+    applyResult(normalizeJobResult(selected));
+    if (selected.status !== "completed" && selected.status !== "failed") {
+      void poll(selected.id, generation.current);
+    }
+    return true;
+  }, [applyResult, cancelRequests, poll, phase]);
+
   const retryPolling = useCallback(() => {
     const currentJob = jobRef.current;
     if (
@@ -242,5 +262,6 @@ export function useJob() {
     approve,
     reset,
     retryPolling,
+    selectJob,
   };
 }

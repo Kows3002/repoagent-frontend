@@ -1,4 +1,5 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "./useAuth";
 import { getGitHubRepositories, hasSessionCsrfToken, setSessionCsrfToken } from "../lib/auth";
@@ -9,6 +10,16 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 describe("GitHub session lifecycle", () => {
   beforeEach(() => { setSessionCsrfToken(null); window.history.replaceState({}, "", "/"); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); setSessionCsrfToken(null); });
+
+  it("requests the session once while StrictMode checks effect cleanup", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json(session));
+    vi.stubGlobal("fetch", fetchMock);
+    let hook!: ReturnType<typeof renderHook<ReturnType<typeof useAuth>, unknown>>;
+    await act(async () => {hook = renderHook(() => useAuth(), {wrapper: StrictMode});});
+    expect(hook.result.current.user?.username).toBe("octocat");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.error).toBeNull();
+  });
 
   it("loads public identity and signs out with cookies and CSRF", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(json(session)).mockResolvedValueOnce(json({ authenticated: false }));

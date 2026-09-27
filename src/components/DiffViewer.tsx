@@ -6,6 +6,7 @@ import {
   Copy,
   FileCode2,
 } from "lucide-react";
+import { useSnackbar } from "./Snackbar";
 import { getDiffStats, parseUnifiedDiff } from "../lib/diff";
 import type { DiffFile } from "../lib/diff";
 
@@ -118,6 +119,7 @@ export default function DiffViewer({
   filename,
   isExample = false,
 }: DiffViewerProps) {
+  const { notify } = useSnackbar();
   const files = useMemo(
     () => parseUnifiedDiff(diff, filename),
     [diff, filename],
@@ -141,8 +143,10 @@ export default function DiffViewer({
     try {
       await navigator.clipboard.writeText(diff);
       setCopyStatus("copied");
+      notify({ id: "diff-copied", tone: "success", message: "Diff copied to your clipboard." });
     } catch {
       setCopyStatus("unavailable");
+      notify({ id: "copy-unavailable", tone: "error", title: "Could not copy the diff", message: "Select and copy the diff manually, or check clipboard permissions." });
     }
     resetTimer.current = setTimeout(() => setCopyStatus("idle"), 3000);
   }

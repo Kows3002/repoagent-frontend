@@ -35,7 +35,7 @@ it("routes OAuth, jobs, polling, and previews to Render with cookies and CSRF", 
 
   expect(fetchMock.mock.calls.map(([url])=>url)).toEqual([
     "https://repoagent.onrender.com/auth/session",
-    "https://repoagent.onrender.com/jobs/",
+    "https://repoagent.onrender.com/jobs",
     "https://repoagent.onrender.com/jobs/42",
     "https://repoagent.onrender.com/jobs/42/preview",
     "https://repoagent.onrender.com/jobs/42/preview",

@@ -1,5 +1,6 @@
 import { sessionRequest } from "./auth";
 import { ApiError, friendlyError } from "./errors";
+import { shareRequest } from "./requests";
 export type PreviewStatus = "idle" | "building" | "ready" | "unsupported" | "failed";
 export interface PreviewResult { status: PreviewStatus; message?: string; project_root?: string; before_url?: string; after_url?: string; expires_at?: number }
 export function normalizePreview(value: unknown): PreviewResult {
@@ -31,5 +32,9 @@ export async function fetchPreview(id: string | number, signal: AbortSignal): Pr
   return normalizePreview(await sessionRequest("/jobs/" + encodeURIComponent(String(id)) + "/preview", {signal}, "poll"));
 }
 export async function startPreview(id: string | number, signal: AbortSignal): Promise<PreviewResult> {
-  return normalizePreview(await sessionRequest("/jobs/" + encodeURIComponent(String(id)) + "/preview", {method: "POST", signal}, "create"));
+  const path = "/jobs/" + encodeURIComponent(String(id)) + "/preview";
+  // Starting a build is idempotent on the server. Share simultaneous starts,
+  // including remounts, and let an already-sent start finish if its UI closes.
+  return shareRequest(`preview-start:${id}`, async transport =>
+    normalizePreview(await sessionRequest(path, {method: "POST", signal: transport}, "create")), signal, false);
 }

@@ -1,6 +1,8 @@
 ﻿# RepoAgent frontend
 
-A responsive React + TypeScript workbench for GitHub code changes, built with Vite, Tailwind CSS, and Lucide icons. Sign in with GitHub, choose a repository, describe a focused change, compare its diff and rendered UI, then explicitly approve the push.
+A dark, responsive React + TypeScript workbench for GitHub code changes, built with Vite, Tailwind CSS, and Lucide icons. Sign in with GitHub, choose a repository, describe a focused change, compare its diff and rendered UI, then explicitly approve the push.
+
+See [the upgrade guide](UPGRADE.md) for the dark redesign, saved activity, request deduplication, and backend-first deployment steps.
 
 ## Run locally
 
@@ -97,7 +99,9 @@ The backend must use the matching preview hostname and scheme. DNS and the rever
 | `GET /auth/session` | Returns `{ authenticated, configured, user, csrf_token? }`. An authenticated user includes `id`, `login`, `name`, and `avatar_url`. |
 | `GET /auth/repositories?page=1` | Returns `{ repositories, has_more, next_page }` for the connected account. |
 | `POST /auth/logout` | Invalidates the database session and clears the cookie. |
-| `POST /jobs/` | Accepts `{ repo_url, task }` and returns a queued, owned job. |
+| `GET /auth/activity` | Lists account-owned sign-in, generation, and push activity. |
+| `GET /jobs` | Lists the newest 50 owned jobs for the Recent jobs panel. |
+| `POST /jobs` | Accepts `{ repo_url, task }` and returns a queued, owned job. |
 | `GET /jobs/{id}` | Polled every 2.5 seconds until completed or failed. |
 | `POST /jobs/{id}/preview` | Starts preparation of both snapshots for a completed job. |
 | `GET /jobs/{id}/preview` | Returns preview status and, when ready, expiring `before_url` and `after_url`. |
@@ -105,9 +109,9 @@ The backend must use the matching preview hostname and scheme. DNS and the rever
 
 All API requests use `credentials: "include"`. POST requests include the CSRF header and a trusted browser origin. The backend retains `GET /auth/me` as a compatibility endpoint; the frontend uses `/auth/session`.
 
-Job responses include `id`, `status`, `repo_url`, `task`, `ai_result`, and `diff`. Stages are queued, analyzing, generating, completed, and failed; the legacy running state is also understood.
+Job responses include `id`, `status`, `repo_url`, `task`, `ai_result`, `diff`, `created_at`, `updated_at`, `pushed_at`, and `commit_message`. Stages are queued, analyzing, generating, completed, and failed; the legacy running state is also understood.
 
-Approval requires a completed, nonempty diff and an explicit successful push response. The approval card starts with `RepoAgent: Apply requested changes` and lets the user edit the commit message before pushing. Messages must be a nonempty single line of up to 200 characters; surrounding spaces are trimmed. The field locks while the push is running and retains the draft after a failure. The success card displays the backend's actual `commit_message`, including when a retry pushes an existing commit. Deploy the updated backend with the frontend; the approval body is optional for older clients and no database migration is required. The backend pushes directly to the repository's default branch; it does not create a branch or pull request.
+Approval requires a completed, nonempty diff and an explicit successful push response. The approval card starts with `RepoAgent: Apply requested changes` and lets the user edit the commit message before pushing. Messages must be a nonempty single line of up to 200 characters; surrounding spaces are trimmed. The field locks while the push is running and retains the draft after a failure. The success card displays the backend's actual `commit_message`, including when a retry pushes an existing commit. Deploy the updated backend with the frontend; the approval body is optional for older clients and startup applies an additive database migration for saved history and push outcomes. The backend pushes directly to the repository's default branch; it does not create a branch or pull request.
 
 ## Build and test
 
@@ -124,7 +128,10 @@ Tests use mocked requests and cover session/CSRF handling, repository selection 
 
 ## UI structure
 
-- `Header`: sticky branding, account controls, and workflow help.
+- `Header`: sticky branding, Workspace/Activity navigation, account controls, and workflow help.
+- `HistoryPanel`, `ActivityPanel`, `useHistory`: database-backed job restoration and lazy account activity.
+- `SnackbarProvider`: accessible success/error notifications with dismissal and paused timers.
+- `lib/requests.ts`: in-flight request sharing with subscriber cancellation and session isolation.
 - `RepoForm`, `RepositoryPicker`, `TaskInput`: account repositories and precise tasks.
 - `StatusTimeline`, `DiffViewer`, `ErrorAlert`, `ApproveCard`: progress, review, friendly errors, and explicit approval.
 - `PreviewPanel`, `usePreview`: real current/updated UI previews, route navigation, and build status.

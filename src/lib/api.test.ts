@@ -5,6 +5,8 @@ import {
   confirmPushResult,
   createJob,
   getJob,
+  getJobHistory,
+  getActivity,
   getCurrentUser,
   logout,
   normalizeJob,
@@ -150,7 +152,7 @@ test("create, poll, and approve use the backend contract without retaining crede
 
   assert.deepEqual(
     requests.map(({ url }) => url),
-    ["/jobs/", "/jobs/42", "/jobs/42/approve"],
+    ["/jobs", "/jobs/42", "/jobs/42/approve"],
   );
   assert.equal(requests[0].options?.method, "POST");
   assert.deepEqual(JSON.parse(String(requests[0].options?.body)), {
@@ -166,10 +168,9 @@ test("create, poll, and approve use the backend contract without retaining crede
   assert.equal(new Headers(requests[1].options?.headers).has("X-CSRF-Token"), false);
   assert.equal(requests.every(({ options }) => options?.credentials === "include"), true);
   assert.equal(JSON.stringify(result).includes("never-retain"), false);
-  assert.equal(
-    requests.every(({ options }) => options?.signal === controller.signal),
-    true,
-  );
+  assert.equal(requests[0].options?.signal, controller.signal);
+  assert.equal(requests[2].options?.signal, controller.signal);
+  assert.ok(requests[1].options?.signal instanceof AbortSignal);
 });
 
 test("HTTP error details are replaced with static safe messages", async (context) => {
@@ -246,4 +247,25 @@ test("approval uses the submitted message when an older backend omits it", async
     await approveJob(7, new AbortController().signal, "  Update the login title  "),
     "Update the login title",
   );
+});
+
+test("history preserves persisted timestamps and commit details without private fields", async context => {
+  const calls: string[] = [];
+  context.mock.method(globalThis, "fetch", async (url: string) => {
+    calls.push(url);
+    return new Response(JSON.stringify(url === "/jobs" ? [{
+      id: 7, status: "completed", diff: "-old\n+new", created_at: null,
+      updated_at: 1700000000, pushed_at: 1700000001, commit_message: "Update title",
+      access_token: "private", workspace_path: "/private",
+    }] : [{id: 8, kind: "job_pushed", message: "Changes pushed to GitHub.", job_id: 7, created_at: 1700000001, token: "private"}]));
+  });
+  const [jobs, activity] = await Promise.all([
+    getJobHistory(new AbortController().signal), getActivity(new AbortController().signal),
+  ]);
+  assert.deepEqual(calls, ["/jobs", "/auth/activity"]);
+  assert.equal(jobs[0].created_at, null);
+  assert.equal(jobs[0].pushed_at, 1700000001);
+  assert.equal(jobs[0].commit_message, "Update title");
+  assert.equal(activity[0].kind, "job_pushed");
+  assert.equal(JSON.stringify({jobs, activity}).includes("private"), false);
 });

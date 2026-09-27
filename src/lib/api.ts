@@ -1,7 +1,7 @@
 import { DEFAULT_COMMIT_MESSAGE, getCommitMessageError } from "./commit";
 import { ApiError, friendlyError, mapError } from "./errors";
 import { API_BASE_URL, getGitHubSession, sessionRequest, signOutGitHub } from "./auth";
-import type { Job, JobInput, JobResult, JobStatus, User } from "./types";
+import type { ActivityEvent, Job, JobInput, JobResult, JobStatus, User } from "./types";
 
 export { SESSION_EXPIRED_EVENT } from "./auth";
 export const githubLoginUrl = `${API_BASE_URL}/auth/github/login`;
@@ -59,6 +59,13 @@ export function normalizeJob(value: unknown): Job {
       status !== "failed" && typeof data.ai_result === "string"
         ? data.ai_result
         : null,
+    ...Object.fromEntries(
+      ["created_at", "updated_at", "pushed_at"].filter(key =>
+        data[key] === null || (typeof data[key] === "number" && Number.isFinite(data[key]) && data[key] >= 0),
+      ).map(key => [key, data[key]]),
+    ),
+    ...(typeof data.commit_message === "string" || data.commit_message === null
+      ? {commit_message: data.commit_message} : {}),
   };
 }
 
@@ -86,7 +93,7 @@ export async function createJob(
   signal: AbortSignal,
 ): Promise<JobResult> {
   const data = await request(
-    "/jobs/",
+    "/jobs",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -125,6 +132,32 @@ export async function getJob(
     "poll",
   );
   return normalizeJobResult(data);
+}
+
+export async function getJobHistory(signal: AbortSignal): Promise<Job[]> {
+  const data = await request("/jobs", {signal}, "poll");
+  if (!Array.isArray(data)) throw new ApiError(friendlyError("service-unavailable"));
+  return data.map(normalizeJob);
+}
+
+export async function getActivity(signal: AbortSignal): Promise<ActivityEvent[]> {
+  const data = await request("/auth/activity", {signal}, "auth");
+  if (!Array.isArray(data)) throw new ApiError(friendlyError("service-unavailable"));
+  return data.map(value => {
+    const event = objectValue(value);
+    if ((typeof event.id !== "string" && typeof event.id !== "number") ||
+      typeof event.kind !== "string" || typeof event.message !== "string" ||
+      typeof event.created_at !== "number" || !Number.isFinite(event.created_at)) {
+      throw new ApiError(friendlyError("service-unavailable"));
+    }
+    return {
+      id: event.id,
+      kind: event.kind,
+      message: event.message,
+      job_id: typeof event.job_id === "string" || typeof event.job_id === "number" ? event.job_id : null,
+      created_at: event.created_at,
+    };
+  });
 }
 
 export function confirmPushResult(value: unknown): void {

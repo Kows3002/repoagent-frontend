@@ -24,7 +24,7 @@ export default function RepoForm({ onSubmit, busy, isSubmitting, authenticated, 
   }
 
   return <section className="card form-card" aria-labelledby="configuration-title">
-    <div className="section-heading"><div><span className="eyebrow">01 / CONFIGURE</span><h2 id="configuration-title">Start a new change</h2></div><span className="heading-icon"><Terminal size={19} /></span></div>
+    <div className="section-heading"><div><span className="eyebrow">REQUEST / 01</span><h2 id="configuration-title">Start a new change</h2></div><span className="heading-icon"><Terminal size={19} /></span></div>
     <form onSubmit={handleSubmit} noValidate>
       <div className="form-body">
         {authenticated ? <RepositoryPicker accountId={accountId ?? "connected-account"} selected={repository} onChange={setRepository} disabled={busy} /> : <div className="field">

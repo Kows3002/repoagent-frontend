@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Code2,
   FileDiff,
-  GitBranch,
   Github,
   GitCommitHorizontal,
   Lightbulb,
@@ -17,6 +16,10 @@ import {
   Workflow,
 } from "lucide-react";
 import Header from "./components/Header";
+import HistoryPanel from "./components/HistoryPanel";
+import ActivityPanel from "./components/ActivityPanel";
+import { SnackbarProvider, useSnackbar } from "./components/Snackbar";
+import { useHistory } from "./hooks/useHistory";
 import RepoForm from "./components/RepoForm";
 import StatusTimeline from "./components/StatusTimeline";
 import DiffViewer from "./components/DiffViewer";
@@ -26,10 +29,11 @@ import Modal from "./components/Modal";
 import PreviewPanel from "./components/PreviewPanel";
 import "./auth.css";
 import "./preview.css";
+import "./workspace.css";
 import { useJob } from "./hooks/useJob";
 import { useAuth } from "./hooks/useAuth";
 import { githubLoginUrl } from "./lib/api";
-import type { JobStatus } from "./lib/types";
+import type { Job, JobStatus } from "./lib/types";
 
 const EXAMPLE_DIFF =
   "diff --git a/src/pages/Login.jsx b/src/pages/Login.jsx\n--- a/src/pages/Login.jsx\n+++ b/src/pages/Login.jsx\n@@ -18,5 +18,5 @@ export default function Login() {\n   return (\n     <Helmet>\n-      <title>Sign in | Visitor Pass</title>\n+      <title>Login | Visitor Pass</title>\n     </Helmet>\n   );";
@@ -65,6 +69,10 @@ const statusCopy: Record<
 };
 
 export default function App() {
+  return <SnackbarProvider><Workspace /></SnackbarProvider>;
+}
+
+function Workspace() {
   const {
     job,
     phase,
@@ -76,9 +84,38 @@ export default function App() {
     submit,
     approve,
     retryPolling,
+    selectJob,
     reset,
   } = useJob();
   const auth = useAuth();
+  const [view, setView] = useState<"workspace" | "activity">("workspace");
+  const [formVersion, setFormVersion] = useState(0);
+  const history = useHistory(auth.user?.github_id, view === "activity");
+  const { notify, clear } = useSnackbar();
+  const lastJobEvent = useRef("");
+  useEffect(() => {
+    if (!job) { lastJobEvent.current = ""; return; }
+    const stage = isPushed ? "pushed" : job.status === "completed" || job.status === "failed" ? job.status : "started";
+    const key = `${job.id}:${stage}`;
+    if (lastJobEvent.current === key) return;
+    lastJobEvent.current = key;
+    if (stage === "started") notify({ id: key, tone: "info", title: "Job created", message: "Your repository change is now in progress." });
+    if (stage === "completed" && job.diff?.trim()) notify({ id: key, tone: "success", title: "Your change is ready", message: "Review the diff and preview before approving." });
+    if (stage === "pushed") notify({ id: key, tone: "success", title: "Changes pushed successfully", message: approvedCommitMessage || "Your approved commit is now on GitHub." });
+    void history.refresh();
+  }, [job, isPushed, approvedCommitMessage, notify, history.refresh]);
+  async function handleSignOut() {
+    clear();
+    if (await auth.signOut()) {
+      setView("workspace");
+      notify({ tone: "success", title: "Signed out", message: "Your work is saved to your account." });
+    }
+  }
+  function openHistoryJob(saved: Job) {
+    const stage = saved.pushed_at ? "pushed" : saved.status === "completed" || saved.status === "failed" ? saved.status : "started";
+    lastJobEvent.current = `${saved.id}:${stage}`;
+    if (selectJob(saved)) setView("workspace");
+  }
   const previousAccount = useRef<number | null>(null);
   useEffect(() => {
     if (auth.loading) return;
@@ -107,54 +144,28 @@ export default function App() {
       <a className="skip-link" href="#main">
         Skip to workspace
       </a>
-      <Header onHelp={() => setHelpOpen(true)} user={auth.user} onLogout={() => void auth.signOut()} loggingOut={auth.loggingOut} />
+      <Header onHelp={() => setHelpOpen(true)} user={auth.user} onLogout={() => void handleSignOut()} loggingOut={auth.loggingOut}
+        view={view} onViewChange={setView} busy={busy}
+        onNewChange={() => { reset(); setFormVersion(value => value + 1); setView("workspace"); }} />
       <main id="main" className="page-width main-content">
         <div className="breadcrumb">
-          <span className="tiny-grid">
-            <i />
-            <i />
-            <i />
-            <i />
-          </span>{" "}
-          Workspace <ChevronRight size={12} />
-          <span>New change</span>
-          <span className="workspace-label">
-            <span className="status-dot" /> YOUR CODE. YOUR CALL.
-          </span>
+          <span className="workspace-slash">/</span> {auth.user?.username || "Personal workspace"} <ChevronRight size={13} />
+          <span>{view === "activity" ? "Activity log" : "Repository changes"}</span>
+          <span className="workspace-label"><span className={"status-dot" + (auth.user ? " connected-dot" : "")} />{auth.user ? "GITHUB CONNECTED" : "AWAITING CONNECTION"}</span>
         </div>
         <section className="page-intro" aria-labelledby="page-title">
           <div>
-            <div className="intro-kicker">
-              <span /> FROM INTENT TO COMMIT
-            </div>
-            <h1 id="page-title">
-              Your next change, <span>simplified.</span>
-            </h1>
-            <p>A precise task. A focused diff. A better repository.</p>
+            <div className="intro-kicker"><span className="intro-index">{view === "activity" ? "02" : "01"}</span> {view === "activity" ? "THE RECORD" : "THE WORKBENCH"}</div>
+            <h1 id="page-title">{view === "activity" ? "A record of your work." : <>Small changes.<br className="mobile-break" /> <span>Full control.</span></>}</h1>
+            <p>{view === "activity" ? "Sign-ins, code changes, and approved commits. Saved to your account." : "A focused place to change your code. Review every line. Ship when ready."}</p>
           </div>
-          <div className="workflow-map" aria-hidden="true">
-            <div>
-              <span>
-                <Terminal size={17} />
-              </span>
-              <small>Describe</small>
-            </div>
-            <i />
-            <div>
-              <span>
-                <FileDiff size={17} />
-              </span>
-              <small>Review</small>
-            </div>
-            <i />
-            <div>
-              <span>
-                <GitBranch size={17} />
-              </span>
-              <small>Ship</small>
-            </div>
+          <div className="workspace-guide" aria-label="Workflow">
+            <span><i>01</i> Describe the change</span>
+            <span><i>02</i> Inspect the difference</span>
+            <span><i>03</i> Approve the commit <ArrowRight size={14} /></span>
           </div>
         </section>
+        <div hidden={view !== "workspace"}>
         <div className="workspace-grid">
           <div className="input-column">
             {auth.error ? <ErrorAlert error={auth.error} onRetry={auth.error.retryable ? () => void auth.refresh() : undefined} retryLabel="Retry sign-in status" /> : null}
@@ -171,6 +182,7 @@ export default function App() {
               </section>
             ) : null}
             <RepoForm
+              key={`${auth.user?.github_id ?? "guest"}:${formVersion}`}
               onSubmit={submit}
               busy={busy}
               isSubmitting={phase === "submitting"}
@@ -187,12 +199,14 @@ export default function App() {
                 </p>
               </div>
             </aside>
+            {auth.user ? <HistoryPanel jobs={history.jobs} selectedId={job?.id} loading={history.loading} error={history.error}
+              onSelect={openHistoryJob} onRefresh={() => void history.refresh()} disabled={busy} /> : null}
           </div>
           <div className="output-column">
             <section className="card status-card" aria-labelledby="job-title">
               <div className="section-heading">
                 <div>
-                  <span className="eyebrow">02 / OBSERVE</span>
+                  <span className="eyebrow">EXECUTION / 02</span>
                   <h2 id="job-title">Live job</h2>
                 </div>
                 <span
@@ -247,7 +261,7 @@ export default function App() {
                     <span className="analysis-icon">
                       <Code2 size={14} />
                     </span>
-                    <span>AI analysis</span>
+                    <span>Repository analysis</span>
                   </div>
                   <span>
                     {job?.status === "failed"
@@ -298,7 +312,7 @@ export default function App() {
             >
               <div className="section-heading">
                 <div>
-                  <span className="eyebrow">03 / REVIEW</span>
+                  <span className="eyebrow">PATCH / 03</span>
                   <h2 id="review-title">The change, in detail</h2>
                 </div>
                 <span className="heading-icon">
@@ -381,12 +395,14 @@ export default function App() {
           </div>
         </div>
         <PreviewPanel key={job?.id ?? "empty"} job={job} />
+        </div>
+        {view === "activity" && auth.user ? <ActivityPanel activity={history.activity} loading={history.loading} error={history.error} onRefresh={() => void history.refresh()} /> : null}
         <footer className="page-footer">
           <span>
             <span className="footer-mark">
               <Code2 size={13} />
             </span>{" "}
-            Built for intentional changes.
+            REPOAGENT / REPOSITORY WORKSPACE
           </span>
           <span>
             Describe <ArrowRight size={11} /> Review <ArrowRight size={11} />{" "}

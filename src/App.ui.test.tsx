@@ -8,6 +8,10 @@ const TASK='Modify ONLY src/App.tsx. Replace "Old title" with "New title".';
 const DIFF='diff --git a/src/App.tsx b/src/App.tsx\n--- a/src/App.tsx\n+++ b/src/App.tsx\n@@ -1 +1 @@\n-Old title\n+New title';
 let signedIn=true;
 let jobFetch=vi.fn();
+let historyFetch=vi.fn();
+let activityFetch=vi.fn();
+let savedJobs: unknown[] = [];
+let savedActivity: unknown[] = [];
 function response(data:unknown,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json"}});}
 const completed={id:42,status:"completed",diff:DIFF,ai_result:"Target file located."};
 async function mount(){
@@ -31,9 +35,14 @@ describe("RepoAgent signed-in workflow",()=>{
   vi.useRealTimers();signedIn=true;setSessionCsrfToken(null);
   window.history.replaceState({},"","/");
   jobFetch=vi.fn().mockRejectedValue(new TypeError("Unexpected request"));
+  savedJobs=[];savedActivity=[];
+  historyFetch=vi.fn(async()=>response(savedJobs));
+  activityFetch=vi.fn(async()=>response(savedActivity));
   vi.stubGlobal("fetch",vi.fn(async(url:string,options?:RequestInit)=>{
    if(url==="/auth/session")return response({authenticated:signedIn,configured:true,user:signedIn?{...USER,login:USER.username,name:"Octocat"}:null,csrf_token:signedIn?"test-csrf":undefined});
    if(url.startsWith("/auth/repositories"))return response({repositories:[REPO],has_more:false,next_page:null});
+   if(url==="/jobs" && options?.method!=="POST")return historyFetch(url,options);
+   if(url==="/auth/activity")return activityFetch(url,options);
    if(url==="/auth/logout"){signedIn=false;return new Response(null,{status:204});}
    if(url.endsWith("/preview"))return response({status:"unsupported",message:"This fixture has no visual app."});
    return jobFetch(url,options);
@@ -53,6 +62,8 @@ describe("RepoAgent signed-in workflow",()=>{
   expect(screen.getByRole("link",{name:/Continue with GitHub/}).getAttribute("href")).toBe("/auth/github/login");
   expect((screen.getByRole("button",{name:"Generate Code Change"}) as HTMLButtonElement).disabled).toBe(true);
   expect(jobFetch).not.toHaveBeenCalled();
+  expect(historyFetch).not.toHaveBeenCalled();
+  expect(activityFetch).not.toHaveBeenCalled();
  });
  it.each([
   {name:"minimal signed-out response",payload:{authenticated:false},configured:true},
@@ -79,7 +90,8 @@ describe("RepoAgent signed-in workflow",()=>{
   fetchMock.mockResolvedValueOnce(response({authenticated:false}));
   render(<App/>);
   await screen.findByRole("heading",{name:"Connection interrupted"});
-  expect(within(screen.getByRole("alert")).getByText("Connection interrupted")).toBeTruthy();
+  expect(within(within(screen.getByRole("main")).getByRole("alert")).getByText("Connection interrupted")).toBeTruthy();
+  expect(await within(screen.getByRole("region",{name:"Notifications"})).findByRole("alert")).toBeTruthy();
   await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Retry sign-in status"}));});
   expect(await screen.findByRole("link",{name:/Continue with GitHub/})).toBeTruthy();
   expect(screen.queryByRole("alert")).toBeNull();
@@ -90,7 +102,7 @@ describe("RepoAgent signed-in workflow",()=>{
   jobFetch.mockResolvedValue(response({id:42,status:"queued"}));
   await mount();await fill();await generate();
   const [path,options]=jobFetch.mock.calls[0];
-  expect(path).toBe("/jobs/");
+  expect(path).toBe("/jobs");
   expect(JSON.parse(options.body)).toEqual({repo_url:REPO.clone_url,task:TASK});
   expect(options.credentials).toBe("include");
   expect(new Headers(options.headers).get("X-CSRF-Token")).toBe("test-csrf");
@@ -105,16 +117,18 @@ describe("RepoAgent signed-in workflow",()=>{
   await act(async()=>{await vi.advanceTimersByTimeAsync(7500);});
   expect(screen.getByRole("table",{name:"Unified diff for src/App.tsx"})).toBeTruthy();
   expect(jobFetch).toHaveBeenCalledTimes(4);
+  expect(within(screen.getByRole("region",{name:"Notifications"})).getByText("Your change is ready")).toBeTruthy();
   const commitInput = screen.getByRole("textbox", {name: "Commit message"}) as HTMLInputElement;
   expect(commitInput.value).toBe("RepoAgent: Apply requested changes");
   fireEvent.change(commitInput, {target: {value: "  Update the login title  "}});
   await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Approve & Push to GitHub"}));});
+  expect(within(screen.getByRole("region",{name:"Notifications"})).getByText("Changes pushed successfully")).toBeTruthy();
   const [approvalPath, approvalOptions] = jobFetch.mock.calls[4];
   expect(approvalPath).toBe("/jobs/42/approve");
   expect(JSON.parse(approvalOptions.body)).toEqual({commit_message: "Update the login title"});
   expect(approvalOptions.credentials).toBe("include");
   expect(new Headers(approvalOptions.headers).get("X-CSRF-Token")).toBe("test-csrf");
-  expect(screen.getByText("Update the login title")).toBeTruthy();
+  expect(within(screen.getByRole("region", {name: "Changes pushed successfully"})).getByText("Update the login title")).toBeTruthy();
   expect(screen.getByRole("heading",{name:"Changes pushed successfully"})).toBeTruthy();
   await act(async()=>{await vi.advanceTimersByTimeAsync(10000);});
   expect(jobFetch).toHaveBeenCalledTimes(5);
@@ -215,7 +229,7 @@ describe("RepoAgent signed-in workflow",()=>{
   });
   expect(commitInput.value).toBe("Original committed title");
   expect(commitInput.disabled).toBe(false);
-  expect(screen.getByRole("alert")).toBeTruthy();
+  expect(within(screen.getByRole("main")).getByRole("alert")).toBeTruthy();
 
   fireEvent.change(commitInput, {target: {value: "Revised title for retry"}});
   await act(async () => {
@@ -223,7 +237,7 @@ describe("RepoAgent signed-in workflow",()=>{
   });
   expect(JSON.parse(jobFetch.mock.calls[2][1].body)).toEqual({commit_message: "Revised title for retry"});
   expect(screen.getByRole("heading", {name: "Changes pushed successfully"})).toBeTruthy();
-  expect(screen.getByText("Original committed title")).toBeTruthy();
+  expect(within(screen.getByRole("region", {name: "Changes pushed successfully"})).getByText("Original committed title")).toBeTruthy();
   expect(screen.queryByText("Revised title for retry")).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
  });
@@ -242,6 +256,95 @@ describe("RepoAgent signed-in workflow",()=>{
   expect((screen.getByRole("textbox", {name: "Commit message"}) as HTMLInputElement).value)
    .toBe("RepoAgent: Apply requested changes");
   expect(jobFetch).toHaveBeenCalledTimes(2);
+ });
+
+ it("loads account activity only after opening the Activity view and keeps the workspace available", async () => {
+  savedActivity = [
+   {id: 9, kind: "login", message: "Signed in with GitHub.", job_id: null, created_at: 1_720_000_000},
+   {id: 10, kind: "job_pushed", message: "Changes pushed successfully.", job_id: 42, created_at: 1_720_000_100},
+  ];
+  await mount();
+  expect(historyFetch).toHaveBeenCalledTimes(1);
+  expect(activityFetch).not.toHaveBeenCalled();
+
+  await act(async () => { fireEvent.click(screen.getByRole("button", {name: "Activity"})); });
+
+  const activity = screen.getByRole("region", {name: "Account activity"});
+  expect(within(activity).getByText("Signed in with GitHub.")).toBeTruthy();
+  expect(within(activity).getByText("Job #42")).toBeTruthy();
+  expect(activityFetch).toHaveBeenCalledTimes(1);
+  expect(activityFetch.mock.calls[0][1].credentials).toBe("include");
+  expect(screen.queryByRole("button", {name: "Generate Code Change"})).toBeNull();
+
+  await act(async () => { fireEvent.click(screen.getByRole("button", {name: "Workspace"})); });
+  expect(screen.getByRole("button", {name: "Generate Code Change"})).toBeTruthy();
+  expect(screen.queryByRole("region", {name: "Account activity"})).toBeNull();
+  expect(activityFetch).toHaveBeenCalledTimes(1);
+ });
+
+ it("restores a saved completed job without creating it again or announcing a new result", async () => {
+  savedJobs = [{...completed, id: 75, repo_url: REPO.clone_url, task: TASK, created_at: 1_720_000_000}];
+  await mount();
+  const saved = await screen.findByRole("button", {name: "Open job 75: octocat/project"});
+  await act(async () => { fireEvent.click(saved); });
+
+  expect(saved.getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("table", {name: "Unified diff for src/App.tsx"})).toBeTruthy();
+  expect(screen.getByRole("button", {name: "Approve & Push to GitHub"})).toBeTruthy();
+  expect((screen.getByRole("textbox", {name: "Commit message"}) as HTMLInputElement).value).toBe("RepoAgent: Apply requested changes");
+  expect(within(screen.getByRole("region", {name: "Notifications"})).queryByText("Your change is ready")).toBeNull();
+  expect(jobFetch).not.toHaveBeenCalled();
+  expect(historyFetch).toHaveBeenCalledTimes(1);
+ });
+
+ it("restores pushed history with the saved commit message and no second approval action", async () => {
+  savedJobs = [{
+   ...completed, id: 76, repo_url: REPO.clone_url, task: TASK,
+   created_at: 1_720_000_000, pushed_at: 1_720_000_100, commit_message: "Saved repository change",
+  }];
+  await mount();
+  await act(async () => { fireEvent.click(await screen.findByRole("button", {name: "Open job 76: octocat/project"})); });
+
+  const approval = screen.getByRole("region", {name: "Changes pushed successfully"});
+  expect(within(approval).getByText("Saved repository change")).toBeTruthy();
+  expect(screen.queryByRole("button", {name: "Approve & Push to GitHub"})).toBeNull();
+  expect(screen.queryByRole("textbox", {name: "Commit message"})).toBeNull();
+  expect(jobFetch).not.toHaveBeenCalled();
+  expect(within(screen.getByRole("region", {name: "Notifications"})).queryByText("Changes pushed successfully")).toBeNull();
+
+  await act(async () => { fireEvent.click(screen.getByRole("button", {name: "New change"})); });
+  expect(screen.queryByRole("region", {name: "Changes pushed successfully"})).toBeNull();
+  expect(screen.queryByRole("table", {name: "Unified diff for src/App.tsx"})).toBeNull();
+  expect(screen.getByRole("button", {name: "Open job 76: octocat/project"}).getAttribute("aria-pressed")).toBe("false");
+ });
+
+ it("allows dismissing an error snackbar while keeping inline recovery available", async () => {
+  jobFetch.mockResolvedValueOnce(response(completed)).mockResolvedValueOnce(response({detail: "Permission denied: secret-token"}, 403));
+  await mount(); await fill(); await generate();
+  await act(async () => { fireEvent.click(screen.getByRole("button", {name: "Approve & Push to GitHub"})); });
+  const notifications = within(screen.getByRole("region", {name: "Notifications"}));
+  const toast = notifications.getByRole("alert");
+  expect(toast.textContent).not.toContain("secret-token");
+  expect(within(screen.getByRole("main")).getByRole("alert")).toBeTruthy();
+  fireEvent.click(within(toast).getByRole("button", {name: /Dismiss/}));
+  expect(notifications.queryByRole("alert")).toBeNull();
+  expect(within(screen.getByRole("main")).getByRole("alert")).toBeTruthy();
+  expect(screen.getByRole("button", {name: "Approve & Push to GitHub"})).toBeTruthy();
+ });
+
+ it("clears history failure feedback after the user retries successfully", async () => {
+  historyFetch.mockRejectedValueOnce(new TypeError("private upstream failure"));
+  await mount();
+  const history = within(screen.getByRole("region", {name: "Recent jobs"}));
+  await history.findByRole("heading", {name: "Connection interrupted"});
+  expect(document.body.textContent).not.toContain("private upstream failure");
+  expect(within(screen.getByRole("region", {name: "Notifications"})).getByRole("alert")).toBeTruthy();
+
+  await act(async () => { fireEvent.click(history.getByRole("button", {name: "Retry job history"})); });
+
+  expect(historyFetch).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(history.getByText("Your work starts here.")).toBeTruthy();
  });
 
 });

@@ -2,13 +2,19 @@ import { ApiError, friendlyError, mapError, type ErrorContext } from "./errors";
 import type { GitHubRepository, GitHubSession, RepositoryPage } from "./types";
 import { isValidGitHubUrl } from "./validation";
 import { resolveApiBaseUrl } from "./config";
+import { clearSharedRequests, shareRequest } from "./requests";
 
 export const API_BASE_URL = resolveApiBaseUrl(import.meta.env);
 export const SESSION_EXPIRED_EVENT = "repoagent:session-expired";
 let sessionCsrfToken: string | null = null;
+let sessionVersion = 0;
 
 // This is an anti-forgery value, never a GitHub access token. Keep it in memory.
 export function setSessionCsrfToken(value: string | null): void {
+  if (value !== sessionCsrfToken || value === null) {
+    sessionVersion += 1;
+    clearSharedRequests();
+  }
   sessionCsrfToken = value;
 }
 
@@ -22,7 +28,7 @@ export function hasSessionCsrfToken(): boolean {
 }
 
 function expireSession() {
-  sessionCsrfToken = null;
+  setSessionCsrfToken(null);
   if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
 }
 
@@ -30,6 +36,18 @@ export async function sessionRequest(
   path: string,
   options: RequestInit = {},
   context: ErrorContext = "auth",
+): Promise<unknown> {
+  if ((options.method ?? "GET").toUpperCase() === "GET") {
+    const headerKey = JSON.stringify([...new Headers(options.headers).entries()].sort());
+    return shareRequest(`GET:${API_BASE_URL}${path}:${headerKey}`, signal => performRequest(path, {...options, signal}, context), options.signal);
+  }
+  return performRequest(path, options, context);
+}
+
+async function performRequest(
+  path: string,
+  options: RequestInit,
+  context: ErrorContext,
 ): Promise<unknown> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
@@ -49,7 +67,6 @@ export async function sessionRequest(
     throw new ApiError(mapError(error, undefined, context));
   }
   if (options.signal?.aborted) throw new DOMException("Request canceled", "AbortError");
-  if (response.status === 401) expireSession();
   if (response.status === 204 && response.ok) return null;
   let data: unknown;
   try {
@@ -59,11 +76,13 @@ export async function sessionRequest(
     if (response.ok && path === "/auth/session") {
       throw new ApiError(friendlyError("invalid-session"));
     }
+    if (response.status === 401) expireSession();
     throw new ApiError(mapError(null, response.ok ? 503 : response.status, context));
   }
+  if (options.signal?.aborted) throw new DOMException("Request canceled", "AbortError");
   if (!response.ok) {
     const error = mapError(data, response.status, context);
-    if ((error.kind === "authentication-required" || error.kind === "session-expired") && response.status !== 401) expireSession();
+    if (response.status === 401 || error.kind === "authentication-required" || error.kind === "session-expired") expireSession();
     throw new ApiError(error);
   }
   return data;
@@ -74,8 +93,13 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 export async function getGitHubSession(signal?: AbortSignal): Promise<GitHubSession> {
+  const version = sessionVersion;
   const data = object(await sessionRequest("/auth/session", { signal }));
   if (signal?.aborted) throw new DOMException("Request canceled", "AbortError");
+  const expectedToken = data.authenticated === true ? data.csrf_token : null;
+  if (version !== sessionVersion && expectedToken !== sessionCsrfToken) {
+    throw new DOMException("Session changed", "AbortError");
+  }
   if (typeof data.authenticated !== "boolean") {
     throw new ApiError(friendlyError("invalid-session"));
   }
@@ -83,14 +107,14 @@ export async function getGitHubSession(signal?: AbortSignal): Promise<GitHubSess
   // signed-out response still permits login unless the server disables it.
   const configured = data.configured !== false;
   if (data.authenticated === false) {
-    sessionCsrfToken = null;
+    setSessionCsrfToken(null);
     return { authenticated: false, configured, user: null };
   }
   const user = object(data.user);
   if (typeof user.id !== "number" || !Number.isFinite(user.id) || typeof user.login !== "string" || !user.login || typeof data.csrf_token !== "string" || !data.csrf_token) {
     throw new ApiError(friendlyError("invalid-session"));
   }
-  sessionCsrfToken = data.csrf_token;
+  setSessionCsrfToken(data.csrf_token);
   return {
     authenticated: true,
     configured,
@@ -106,7 +130,7 @@ export async function getGitHubSession(signal?: AbortSignal): Promise<GitHubSess
 export async function signOutGitHub(signal?: AbortSignal): Promise<void> {
   await sessionRequest("/auth/logout", { method: "POST", signal });
   if (signal?.aborted) throw new DOMException("Request canceled", "AbortError");
-  sessionCsrfToken = null;
+  setSessionCsrfToken(null);
 }
 
 export async function getGitHubRepositories(page = 1, signal?: AbortSignal): Promise<RepositoryPage> {

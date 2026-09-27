@@ -45,6 +45,18 @@ export interface Job {
   task?: string;
   diff: string | null;
   ai_result: string | null;
+  created_at?: number | null;
+  updated_at?: number | null;
+  pushed_at?: number | null;
+  commit_message?: string | null;
+}
+
+export interface ActivityEvent {
+  id: string | number;
+  kind: string;
+  message: string;
+  job_id: string | number | null;
+  created_at: number;
 }
 
 export type ErrorKind =
